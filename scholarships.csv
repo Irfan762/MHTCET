@@ -1,0 +1,13 @@
+id,name,description,eligibility,amount,application_deadline
+1,State Merit Scholarship,Merit-based scholarship for top performers,General category with >90% marks,₹50000 per year,June 30
+2,EBC Scholarship,Economically Backward Class scholarship,EBC certificate + family income <8 lakh,₹60000 per year,July 15
+3,TFWS,Tuition Fee Waiver Scheme,Maharashtra domicile + family income <8 lakh,Full tuition fee waiver,August 1
+4,SC/ST/OBC Scholarships,Government scholarships for reserved categories,Valid caste certificate,₹75000 per year,July 31
+5,Minority Scholarship,For religious minority students,Minority certificate + merit,₹40000 per year,August 15
+6,Catholic Minority Scholarship,For Catholic minority students,Catholic certificate + merit,₹45000 per year,August 10
+7,Somaiya Merit Award,Merit-based award by Somaiya Trust,Top 10% students in college,₹100000 per year,September 1
+8,Merit-Based Scholarship,General merit scholarship,Top 5% in entrance exam,₹80000 per year,June 15
+9,Sports Scholarship,For sports achievers,State/National level sports achievement,₹30000 per year,July 1
+10,Army Ward Scholarship,For army personnel children,Army service certificate,₹50000 per year,August 1
+11,Government Scholarships,Various government schemes,Based on category and income,Variable,July 31
+12,Symbiosis Merit Scholarship,University merit scholarship,Top performers in university,₹150000 per year,September 15
