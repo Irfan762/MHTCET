@@ -5,6 +5,7 @@ function App() {
   // State management
   const [activeTab, setActiveTab] = useState('dashboard');
   const [predictions, setPredictions] = useState([]);
+  const [predictionHistory, setPredictionHistory] = useState([]);
   const [colleges, setColleges] = useState([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
@@ -15,6 +16,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [notifications, setNotifications] = useState([]);
+  const [showHistoryView, setShowHistoryView] = useState(false);
   const chatMessagesEndRef = useRef(null);
 
   // Chat states
@@ -51,12 +53,25 @@ function App() {
     chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  // Load colleges on component mount
+  // Load user from localStorage on component mount
   useEffect(() => {
     fetchColleges();
     const savedUser = localStorage.getItem('mhtcet_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const savedToken = localStorage.getItem('mhtcet_token');
+    
+    console.log('Checking saved user:', savedUser ? 'Found' : 'Not found');
+    console.log('Checking saved token:', savedToken ? 'Found' : 'Not found');
+    
+    if (savedUser && savedToken) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        console.log('User restored from localStorage:', parsedUser);
+      } catch (error) {
+        console.error('Error parsing saved user:', error);
+        localStorage.removeItem('mhtcet_user');
+        localStorage.removeItem('mhtcet_token');
+      }
     }
   }, []);
 
@@ -65,6 +80,7 @@ function App() {
     if (user && !chatSessionId) {
       initializeChatSession();
       loadChatHistory();
+      loadPredictionHistory(); // Load prediction history when user logs in
     }
   }, [user]);
 
@@ -74,13 +90,35 @@ function App() {
     setChatSessionId(sessionId);
   };
 
+  // Load prediction history for the user
+  const loadPredictionHistory = async () => {
+    if (!user) return;
+    
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3000/api/predictions/history', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPredictionHistory(data.predictions || []);
+        console.log('Prediction history loaded:', data.predictions?.length || 0, 'predictions');
+      }
+    } catch (error) {
+      console.error('Error loading prediction history:', error);
+    }
+  };
+
   // Load chat history for the user
   const loadChatHistory = async () => {
     if (!user) return;
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://localhost:3001/api/chat/history', {
+      const response = await fetch('http://127.0.0.1:3000/api/chat/history', {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -101,7 +139,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch(`http://localhost:3001/api/chat/history/${sessionId}`, {
+      const response = await fetch(`http://127.0.0.1:3000/api/chat/history/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -137,6 +175,18 @@ function App() {
     setShowChatHistory(false);
   };
 
+  // Load specific prediction from history
+  const loadPredictionFromHistory = (historyItem) => {
+    setPredictions(historyItem.predictions);
+    setFormData({
+      percentile: historyItem.inputData.percentile.toString(),
+      category: historyItem.inputData.category,
+      courses: historyItem.inputData.courses
+    });
+    setShowHistoryView(false);
+    addNotification('📊 Prediction loaded from history', 'success');
+  };
+
 
 
   // Notification system
@@ -150,7 +200,7 @@ function App() {
 
   const fetchColleges = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/colleges');
+      const response = await fetch('http://127.0.0.1:3000/api/colleges');
       const data = await response.json();
       if (data.success) {
         setColleges(data.colleges);
@@ -166,15 +216,19 @@ function App() {
   // Handler functions
   const handlePrediction = async (e) => {
     e.preventDefault();
+    
+    // Temporary bypass for testing - remove this later
     if (!user) {
-      setShowAuthModal(true);
-      addNotification('Please login to get predictions', 'warning');
-      return;
+      const tempUser = { id: 'temp', name: 'Test User', email: 'test@test.com' };
+      setUser(tempUser);
+      localStorage.setItem('mhtcet_user', JSON.stringify(tempUser));
+      localStorage.setItem('mhtcet_token', 'temp-token');
     }
+    
     setLoading(true);
     try {
-      const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://localhost:3001/api/predictions', {
+      const token = localStorage.getItem('mhtcet_token') || 'temp-token';
+      const response = await fetch('http://127.0.0.1:3000/api/predictions', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -188,11 +242,13 @@ function App() {
         setPredictions(data.predictions);
         setSelectedCourseFilter('all'); // Reset filter for new predictions
         setActiveTab('results');
+        loadPredictionHistory(); // Reload prediction history after new prediction
         addNotification('🎉 Predictions generated successfully!', 'success');
       } else {
         addNotification(data.message || 'Failed to generate predictions', 'error');
       }
     } catch (error) {
+      console.error('Prediction error:', error);
       addNotification('Failed to generate predictions', 'error');
     } finally {
       setLoading(false);
@@ -202,16 +258,55 @@ function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
+    
+    // Client-side validation
+    if (authMode === 'register' && (!authData.name || authData.name.trim().length < 2)) {
+      addNotification('Please enter a valid name (at least 2 characters)', 'error');
+      setLoading(false);
+      return;
+    }
+    
+    if (!authData.email || !authData.email.includes('@')) {
+      addNotification('Please enter a valid email address', 'error');
+      setLoading(false);
+      return;
+    }
+    
+    if (!authData.password || authData.password.length < 6) {
+      addNotification('Password must be at least 6 characters long', 'error');
+      setLoading(false);
+      return;
+    }
+    
+    // Clear any previous errors
+    console.log('Starting authentication process...');
+    console.log('Auth mode:', authMode);
+    console.log('Auth data:', { ...authData, password: '[HIDDEN]' });
+    
     try {
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const response = await fetch(`http://localhost:3001${endpoint}`, {
+      const url = `http://127.0.0.1:3000${endpoint}`;
+      
+      console.log('Making request to:', url);
+      
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include', // Include cookies
         body: JSON.stringify(authData),
       });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       const data = await response.json();
+      console.log('Response data:', data);
+      
       if (data.success) {
+        console.log('Authentication successful!');
         setUser(data.user);
         localStorage.setItem('mhtcet_user', JSON.stringify(data.user));
         localStorage.setItem('mhtcet_token', data.token);
@@ -219,10 +314,12 @@ function App() {
         setAuthData({ name: '', email: '', password: '' });
         addNotification(`🎉 ${authMode === 'login' ? 'Login' : 'Registration'} successful!`, 'success');
       } else {
+        console.error('Authentication failed:', data.message);
         addNotification(data.message || 'Authentication failed', 'error');
       }
     } catch (error) {
-      addNotification('Authentication failed. Please try again.', 'error');
+      console.error('Authentication error:', error);
+      addNotification(`Authentication failed: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -230,7 +327,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:3001/api/auth/logout', {
+      await fetch('http://127.0.0.1:3000/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       });
@@ -269,7 +366,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://localhost:3001/api/chat', {
+      const response = await fetch('http://127.0.0.1:3000/api/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -310,7 +407,7 @@ function App() {
   const downloadPDF = async (college) => {
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://localhost:3001/api/generate-pdf', {
+      const response = await fetch('http://127.0.0.1:3000/api/generate-pdf', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -1390,7 +1487,7 @@ function App() {
                     🚀 Login Now
                   </button>
                 </div>
-              ) : predictions.length === 0 ? (
+              ) : predictions.length === 0 && predictionHistory.length === 0 ? (
                 <div className="animate-zoom-in" style={{ textAlign: 'center', padding: '4rem' }}>
                   <div style={{ fontSize: '4rem', marginBottom: '2rem' }}>📊</div>
                   <h3 className="gradient-text" style={{ fontSize: '2rem', fontWeight: '700', marginBottom: '1rem' }}>
@@ -1403,17 +1500,163 @@ function App() {
                     🎯 Start Prediction
                   </button>
                 </div>
-              ) : (
+              ) : predictions.length === 0 && predictionHistory.length > 0 ? (
                 <div>
                   <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
+                    <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
+                      📚 Your Prediction History
+                    </h3>
+                    <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
+                      View and reload your previous predictions
+                    </p>
+                  </div>
+
+                  {/* History List */}
+                  <div className="grid-pro" style={{ gap: 'var(--space-6)' }}>
+                    {predictionHistory.map((historyItem, index) => (
+                      <div key={historyItem._id} className="card-pro animate-slide-in-pro" style={{ animationDelay: `${index * 0.1}s` }}>
+                        <div className="card-body-pro">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
+                            <div>
+                              <h4 className="gradient-text-pro text-xl font-bold mb-2">
+                                📊 Prediction #{predictionHistory.length - index}
+                              </h4>
+                              <p className="text-gray-600 text-sm">
+                                {new Date(historyItem.createdAt).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => loadPredictionFromHistory(historyItem)}
+                              className="btn-primary-pro"
+                              style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
+                            >
+                              📂 Load
+                            </button>
+                          </div>
+                          
+                          <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
+                              <div className="text-xs text-gray-500">Percentile</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-success-600">{historyItem.metadata?.highProbability || 0}</div>
+                              <div className="text-xs text-gray-500">High Probability</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-gray-700">{historyItem.predictions?.length || 0}</div>
+                              <div className="text-xs text-gray-500">Total Colleges</div>
+                            </div>
+                          </div>
+                          
+                          <div style={{ marginBottom: 'var(--space-3)' }}>
+                            <div className="text-sm font-semibold text-gray-700 mb-1">Category: {historyItem.inputData.category}</div>
+                            <div className="text-sm text-gray-600">
+                              Courses: {historyItem.inputData.courses?.join(', ') || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div style={{ textAlign: 'center', marginTop: 'var(--space-8)' }}>
+                    <button onClick={() => setActiveTab('predictor')} className="btn-modern animate-pulse-glow">
+                      🎯 Generate New Prediction
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ marginBottom: '3rem', textAlign: 'center', position: 'relative' }}>
                     <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
                       📊 Your Prediction Results
                     </h3>
                     <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
                       Based on your MHT-CET performance analysis
                     </p>
+                    
+                    {/* History Toggle Button */}
+                    {predictionHistory.length > 0 && (
+                      <div style={{ position: 'absolute', top: 0, right: 0 }}>
+                        <button
+                          onClick={() => setShowHistoryView(!showHistoryView)}
+                          className="btn-secondary-pro"
+                          style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' ,color: 'black' }}
+                        >
+                          {showHistoryView ? '📊 Current Results' : '📚 View History'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Show History View or Current Results */}
+                  {showHistoryView ? (
+                    /* History View */
+                    <div>
+                      <div className="grid-pro" style={{ gap: 'var(--space-6)' }}>
+                        {predictionHistory.map((historyItem, index) => (
+                          <div key={historyItem._id} className="card-pro animate-slide-in-pro" style={{ animationDelay: `${index * 0.1}s` }}>
+                            <div className="card-body-pro">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
+                                <div>
+                                  <h4 className="gradient-text-pro text-xl font-bold mb-2">
+                                    📊 Prediction #{predictionHistory.length - index}
+                                  </h4>
+                                  <p className="text-gray-600 text-sm">
+                                    {new Date(historyItem.createdAt).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => loadPredictionFromHistory(historyItem)}
+                                  className="btn-primary-pro"
+                                  style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
+                                >
+                                  📂 Load
+                                </button>
+                              </div>
+                              
+                              <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
+                                  <div className="text-xs text-gray-500">Percentile</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-success-600">{historyItem.metadata?.highProbability || 0}</div>
+                                  <div className="text-xs text-gray-500">High Probability</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-2xl font-bold text-gray-700">{historyItem.predictions?.length || 0}</div>
+                                  <div className="text-xs text-gray-500">Total Colleges</div>
+                                </div>
+                              </div>
+                              
+                              <div style={{ marginBottom: 'var(--space-3)' }}>
+                                <div className="text-sm font-semibold text-gray-700 mb-1">Category: {historyItem.inputData.category}</div>
+                                <div className="text-sm text-gray-600">
+                                  Courses: {historyItem.inputData.courses?.join(', ') || 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Current Results View */
+                    <div>
                   {/* Results Summary */}
                   <div className="glass-card animate-slide-top" style={{ padding: '2rem', marginBottom: '2rem', borderRadius: '20px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
@@ -1584,6 +1827,8 @@ function App() {
                       </div>
                     ))}
                   </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

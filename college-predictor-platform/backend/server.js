@@ -29,8 +29,11 @@ connectDB();
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'],
+  credentials: true, // Enable credentials for cookies
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
 }));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
@@ -50,6 +53,15 @@ app.get('/', (req, res) => {
       auth: '/api/auth/*',
       chat: '/api/chat'
     }
+  });
+});
+
+// Simple test endpoint
+app.get('/test', (req, res) => {
+  res.json({ 
+    success: true,
+    message: 'Backend is reachable!',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -105,10 +117,12 @@ app.post('/api/seed', async (req, res) => {
 // Authentication routes
 app.post('/api/auth/register', async (req, res) => {
   try {
+    console.log('Registration attempt:', { body: req.body, headers: req.headers.origin });
     const { name, email, password } = req.body;
 
     // Validation
     if (!name || !email || !password) {
+      console.log('Validation failed: Missing fields');
       return res.status(400).json({
         success: false,
         message: 'Please provide name, email, and password'
@@ -116,6 +130,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     if (password.length < 6) {
+      console.log('Validation failed: Password too short');
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 6 characters long'
@@ -125,6 +140,7 @@ app.post('/api/auth/register', async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
+      console.log('Registration failed: User already exists');
       return res.status(400).json({
         success: false,
         message: 'User already exists with this email'
@@ -139,6 +155,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     await user.save();
+    console.log('User created successfully:', user.email);
 
     // Generate token
     const token = generateToken(user._id);
@@ -146,11 +163,12 @@ app.post('/api/auth/register', async (req, res) => {
     // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: false, // Set to false for development
+      sameSite: 'lax', // Changed from 'strict' to 'lax' for better compatibility
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
+    console.log('Registration successful for:', user.email);
     res.status(201).json({
       success: true,
       message: 'Registration successful',
@@ -174,10 +192,12 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('Login attempt:', { body: req.body, headers: req.headers.origin });
     const { email, password } = req.body;
 
     // Validation
     if (!email || !password) {
+      console.log('Validation failed: Missing email or password');
       return res.status(400).json({
         success: false,
         message: 'Please provide email and password'
@@ -187,6 +207,7 @@ app.post('/api/auth/login', async (req, res) => {
     // Find user and include password for comparison
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user) {
+      console.log('Login failed: User not found for email:', email);
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -196,6 +217,7 @@ app.post('/api/auth/login', async (req, res) => {
     // Check password
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
+      console.log('Login failed: Invalid password for email:', email);
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -204,6 +226,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Check if account is active
     if (!user.isActive) {
+      console.log('Login failed: Account deactivated for email:', email);
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated'
@@ -220,11 +243,12 @@ app.post('/api/auth/login', async (req, res) => {
     // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: false, // Set to false for development
+      sameSite: 'lax', // Changed from 'strict' to 'lax' for better compatibility
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
+    console.log('Login successful for:', user.email);
     res.json({
       success: true,
       message: 'Login successful',
@@ -1258,22 +1282,10 @@ app.use('*', (req, res) => {
   });
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🍃 Database: MongoDB`);
-  
-  // Auto-seed in development if no colleges exist
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      const collegeCount = await College.countDocuments();
-      if (collegeCount === 0) {
-        console.log('🌱 No colleges found, seeding database...');
-        await seedColleges();
-      }
-    } catch (error) {
-      console.error('❌ Auto-seeding failed:', error.message);
-    }
-  }
+  console.log(`🔗 Backend accessible at: http://localhost:${PORT} and http://127.0.0.1:${PORT}`);
 });
