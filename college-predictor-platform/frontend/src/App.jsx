@@ -39,7 +39,10 @@ function App() {
   const [formData, setFormData] = useState({
     percentile: '',
     category: 'General',
-    courses: ['Computer Engineering'] // Changed to array for multiple selection
+    courses: ['Computer Engineering'], // Changed to array for multiple selection
+    universityType: 'All',
+    includeLadies: false,
+    includeTFWS: false
   });
 
   const [authData, setAuthData] = useState({
@@ -96,7 +99,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://127.0.0.1:3000/api/predictions/history', {
+      const response = await fetch('http://127.0.0.1:3001/api/predictions/history', {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -118,7 +121,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://127.0.0.1:3000/api/chat/history', {
+      const response = await fetch('http://127.0.0.1:3001/api/chat/history', {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -139,7 +142,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch(`http://127.0.0.1:3000/api/chat/history/${sessionId}`, {
+      const response = await fetch(`http://127.0.0.1:3001/api/chat/history/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -187,6 +190,116 @@ function App() {
     addNotification('📊 Prediction loaded from history', 'success');
   };
 
+  // Delete specific prediction from history
+  const deletePrediction = async (predictionId) => {
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch(`http://127.0.0.1:3001/api/predictions/${predictionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Remove from local state
+        setPredictionHistory(prev => prev.filter(p => p._id !== predictionId));
+        addNotification('🗑️ Prediction deleted successfully', 'success');
+      } else {
+        addNotification('Failed to delete prediction', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting prediction:', error);
+      addNotification('Failed to delete prediction', 'error');
+    }
+  };
+
+  // Delete all prediction history
+  const deleteAllPredictions = async () => {
+    if (!window.confirm('Are you sure you want to delete all prediction history? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3001/api/predictions', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setPredictionHistory([]);
+        addNotification('🗑️ All predictions deleted successfully', 'success');
+      } else {
+        addNotification('Failed to delete predictions', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting predictions:', error);
+      addNotification('Failed to delete predictions', 'error');
+    }
+  };
+
+  // Delete specific chat session
+  const deleteChatSession = async (sessionId) => {
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch(`http://127.0.0.1:3001/api/chat/history/${sessionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Remove from local state
+        setChatHistory(prev => prev.filter(session => session.sessionId !== sessionId));
+        addNotification('🗑️ Chat session deleted successfully', 'success');
+      } else {
+        addNotification('Failed to delete chat session', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting chat session:', error);
+      addNotification('Failed to delete chat session', 'error');
+    }
+  };
+
+  // Delete all chat history
+  const deleteAllChatHistory = async () => {
+    if (!window.confirm('Are you sure you want to delete all chat history? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3001/api/chat/history', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setChatHistory([]);
+        addNotification('🗑️ All chat history deleted successfully', 'success');
+      } else {
+        addNotification('Failed to delete chat history', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting chat history:', error);
+      addNotification('Failed to delete chat history', 'error');
+    }
+  };
+
 
 
   // Notification system
@@ -200,7 +313,7 @@ function App() {
 
   const fetchColleges = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:3000/api/colleges');
+      const response = await fetch('http://127.0.0.1:3001/api/colleges');
       const data = await response.json();
       if (data.success) {
         setColleges(data.colleges);
@@ -228,7 +341,7 @@ function App() {
     setLoading(true);
     try {
       const token = localStorage.getItem('mhtcet_token') || 'temp-token';
-      const response = await fetch('http://127.0.0.1:3000/api/predictions', {
+      const response = await fetch('http://127.0.0.1:3001/api/predictions', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -285,7 +398,7 @@ function App() {
     
     try {
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const url = `http://127.0.0.1:3000${endpoint}`;
+      const url = `http://127.0.0.1:3001${endpoint}`;
       
       console.log('Making request to:', url);
       
@@ -327,7 +440,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      await fetch('http://127.0.0.1:3000/api/auth/logout', {
+      await fetch('http://127.0.0.1:3001/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       });
@@ -366,7 +479,7 @@ function App() {
     
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://127.0.0.1:3000/api/chat', {
+      const response = await fetch('http://127.0.0.1:3001/api/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -407,28 +520,97 @@ function App() {
   const downloadPDF = async (college) => {
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch('http://127.0.0.1:3000/api/generate-pdf', {
+      const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token || 'temp-token'}`
         },
         credentials: 'include',
-        body: JSON.stringify({ predictions: [college], studentInfo: { ...formData, name: user?.name } }),
+        body: JSON.stringify({ 
+          predictions: [college], 
+          studentInfo: { 
+            ...formData, 
+            name: user?.name || 'Guest User',
+            course: college.course
+          } 
+        }),
       });
-      const htmlContent = await response.text();
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-      const url = window.URL.createObjectURL(blob);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      // Check content type
+      const contentType = response.headers.get('content-type');
+      console.log('Response content type:', contentType);
+
+      // Handle PDF response with explicit MIME type
+      const arrayBuffer = await response.arrayBuffer();
+      const pdfBlob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      
+      console.log('PDF blob size:', pdfBlob.size);
+      console.log('PDF blob type:', pdfBlob.type);
+
+      const url = window.URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${college.name.replace(/\s+/g, '-')}-report.html`;
+      a.download = `${college.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '-')}-MHT-CET-Report.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      addNotification('📄 Report downloaded successfully!', 'success');
+      addNotification('📄 PDF Report downloaded successfully!', 'success');
     } catch (error) {
-      addNotification('Failed to download report', 'error');
+      console.error('PDF download error:', error);
+      addNotification(`Failed to download PDF report: ${error.message}`, 'error');
+    }
+  };
+
+  const downloadAllPredictionsPDF = async () => {
+    try {
+      if (!predictions || predictions.length === 0) {
+        addNotification('No predictions available to download', 'warning');
+        return;
+      }
+
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || 'temp-token'}`
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          predictions: predictions, 
+          studentInfo: { 
+            ...formData, 
+            name: user?.name || 'Guest User',
+            courses: formData.courses
+          } 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Handle PDF response
+      const pdfBlob = await response.blob();
+      const url = window.URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MHT-CET-Complete-Prediction-Report-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      addNotification(`📄 Complete PDF Report with ${predictions.length} predictions downloaded!`, 'success');
+    } catch (error) {
+      console.error('PDF download error:', error);
+      addNotification('Failed to download complete PDF report', 'error');
     }
   };
 
@@ -849,6 +1031,57 @@ function App() {
                           <option value="ST">ST</option>
                           <option value="EWS">EWS</option>
                         </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-semibold mb-2">
+                          🏛️ University Type
+                        </label>
+                        <select
+                          value={formData.universityType || 'All'}
+                          onChange={(e) => setFormData({...formData, universityType: e.target.value})}
+                          className="input-pro focus-ring-pro"
+                        >
+                          <option value="All">All Universities</option>
+                          <option value="State">State Level</option>
+                          <option value="Home University">Home University</option>
+                        </select>
+                        <div className="mt-1 text-xs text-gray-500">
+                          Home University: For students from specific university regions
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-semibold mb-2">
+                          👩‍🎓 Seat Preferences
+                        </label>
+                        <div className="space-y-3">
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.includeLadies || false}
+                              onChange={(e) => setFormData({...formData, includeLadies: e.target.checked})}
+                              className="w-4 h-4 text-pink-600 bg-gray-100 border-gray-300 rounded focus:ring-pink-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">
+                              👩‍🎓 Include Ladies Quota Seats
+                            </span>
+                          </label>
+                          <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.includeTFWS || false}
+                              onChange={(e) => setFormData({...formData, includeTFWS: e.target.checked})}
+                              className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">
+                              💰 Include TFWS (Tuition Fee Waiver Scheme)
+                            </span>
+                          </label>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500">
+                          TFWS: Free tuition for economically weaker sections
+                        </div>
                       </div>
 
                       <div>
@@ -1531,13 +1764,33 @@ function App() {
                                 })}
                               </p>
                             </div>
-                            <button
-                              onClick={() => loadPredictionFromHistory(historyItem)}
-                              className="btn-primary-pro"
-                              style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
-                            >
-                              📂 Load
-                            </button>
+                            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                              <button
+                                onClick={() => loadPredictionFromHistory(historyItem)}
+                                className="btn-primary-pro"
+                                style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
+                              >
+                                📂 Load
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Are you sure you want to delete this prediction? This action cannot be undone.')) {
+                                    deletePrediction(historyItem._id);
+                                  }
+                                }}
+                                className="btn-secondary-pro"
+                                style={{ 
+                                  fontSize: '0.875rem', 
+                                  padding: 'var(--space-2) var(--space-4)',
+                                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                  color: 'white',
+                                  border: 'none'
+                                }}
+                                title="Delete this prediction"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </div>
                           
                           <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
@@ -1566,10 +1819,24 @@ function App() {
                     ))}
                   </div>
                   
-                  <div style={{ textAlign: 'center', marginTop: 'var(--space-8)' }}>
+                  <div style={{ textAlign: 'center', marginTop: 'var(--space-8)', display: 'flex', gap: 'var(--space-4)', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => setActiveTab('predictor')} className="btn-modern animate-pulse-glow">
                       🎯 Generate New Prediction
                     </button>
+                    {predictionHistory.length > 0 && (
+                      <button 
+                        onClick={deleteAllPredictions}
+                        className="btn-secondary-pro"
+                        style={{ 
+                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                          color: 'white',
+                          border: 'none',
+                          padding: 'var(--space-3) var(--space-6)'
+                        }}
+                      >
+                        🗑️ Delete All History
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1581,7 +1848,7 @@ function App() {
                     <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
                       Based on your MHT-CET performance analysis
                     </p>
-                    
+                  hw
                     {/* History Toggle Button */}
                     {predictionHistory.length > 0 && (
                       <div style={{ position: 'absolute', top: 0, right: 0 }}>
@@ -1619,13 +1886,33 @@ function App() {
                                     })}
                                   </p>
                                 </div>
-                                <button
-                                  onClick={() => loadPredictionFromHistory(historyItem)}
-                                  className="btn-primary-pro"
-                                  style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
-                                >
-                                  📂 Load
-                                </button>
+                                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                  <button
+                                    onClick={() => loadPredictionFromHistory(historyItem)}
+                                    className="btn-primary-pro"
+                                    style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' }}
+                                  >
+                                    📂 Load
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm('Are you sure you want to delete this prediction? This action cannot be undone.')) {
+                                        deletePrediction(historyItem._id);
+                                      }
+                                    }}
+                                    className="btn-secondary-pro"
+                                    style={{ 
+                                      fontSize: '0.875rem', 
+                                      padding: 'var(--space-2) var(--space-4)',
+                                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                      color: 'white',
+                                      border: 'none'
+                                    }}
+                                    title="Delete this prediction"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
                               </div>
                               
                               <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
@@ -1734,7 +2021,7 @@ function App() {
                         <button
                           onClick={() => setSelectedCourseFilter('all')}
                           className={`btn-${selectedCourseFilter === 'all' ? 'primary' : 'secondary'}-pro`}
-                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem',color:'black' }}
                         >
                           All Courses ({predictions.length})
                         </button>
@@ -1745,7 +2032,7 @@ function App() {
                               key={course}
                               onClick={() => setSelectedCourseFilter(course)}
                               className={`btn-${selectedCourseFilter === course ? 'primary' : 'secondary'}-pro`}
-                              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color:'black' }}
                             >
                               {course} ({courseCount})
                             </button>
@@ -1754,6 +2041,33 @@ function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Download All PDF Button */}
+                  <div className="glass-card animate-slide-top" style={{ padding: '1.5rem', marginBottom: '2rem', borderRadius: '20px', textAlign: 'center' }}>
+                    <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>
+                      📄 Download Complete Report
+                    </h4>
+                    <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                      Get a comprehensive PDF report with all {predictions.length} college predictions
+                    </p>
+                    <button 
+                      onClick={downloadAllPredictionsPDF}
+                      className="btn-modern animate-pulse-glow"
+                      style={{ 
+                        padding: '1rem 2rem', 
+                        fontSize: '1rem',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      📄 Download Complete PDF Report
+                    </button>
+                  </div>
 
                   {/* Predictions List */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

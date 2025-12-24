@@ -49,33 +49,52 @@ const collegeSchema = new mongoose.Schema({
   cutoff: {
     general: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
-      max: 100
+      max: 100,
+      default: null
     },
     obc: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
-      max: 100
+      max: 100,
+      default: null
     },
     sc: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
-      max: 100
+      max: 100,
+      default: null
     },
     st: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
-      max: 100
+      max: 100,
+      default: null
     },
     ews: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
-      max: 100
+      max: 100,
+      default: null
+    },
+    vjnt: {
+      type: Number,
+      required: false,
+      min: 0,
+      max: 100,
+      default: null
+    },
+    sbc: {
+      type: Number,
+      required: false,
+      min: 0,
+      max: 100,
+      default: null
     }
   },
   fees: {

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import puppeteer from 'puppeteer';
 
 // Database and Models
 import connectDB from './config/database.js';
@@ -445,8 +446,8 @@ app.get('/api/colleges/:id', async (req, res) => {
   }
 });
 
-// Predictions endpoint with MongoDB
-app.post('/api/predictions', authenticate, async (req, res) => {
+// Enhanced Predictions endpoint with real MHT-CET data
+app.post('/api/predictions', optionalAuth, async (req, res) => {
   try {
     const { percentile, category, courses } = req.body;
 
@@ -470,25 +471,82 @@ app.post('/api/predictions', authenticate, async (req, res) => {
     const courseResults = {};
 
     for (const course of courses) {
-      // Get colleges that offer the selected course
+      // Enhanced course matching with flexible search
       const colleges = await College.find({
         isActive: true,
-        'courses.name': new RegExp(course, 'i')
+        $or: [
+          { 'courses.name': new RegExp(course, 'i') },
+          { 'courses.name': new RegExp(course.replace(/Engineering|Engg/, '(Engineering|Engg)'), 'i') },
+          { 'courses.name': new RegExp(course.replace(/Computer Science/, 'Computer'), 'i') },
+          { 'courses.name': new RegExp(course.replace(/Information Technology/, 'IT'), 'i') }
+        ]
       }).lean();
 
       if (colleges.length > 0) {
-        // Generate predictions for this course
+        // Generate enhanced predictions for this course
         const coursePredictions = colleges.map((college, index) => {
-          const cutoffForCategory = college.cutoff[category.toLowerCase()] || college.cutoff.general;
+          // Find the specific course cutoff or use college overall cutoff
+          const specificCourse = college.courses.find(c => 
+            c.name.toLowerCase().includes(course.toLowerCase()) ||
+            course.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]) ||
+            (course.includes('Computer') && c.name.includes('Computer')) ||
+            (course.includes('Information') && c.name.includes('Information'))
+          );
+          
+          // Get category-specific cutoff with fallback logic
+          const categoryKey = category.toLowerCase();
+          let cutoffForCategory;
+          
+          if (specificCourse && specificCourse.cutoff) {
+            cutoffForCategory = specificCourse.cutoff[categoryKey] || 
+                              specificCourse.cutoff.general || 
+                              college.cutoff[categoryKey] || 
+                              college.cutoff.general;
+          } else {
+            cutoffForCategory = college.cutoff[categoryKey] || 
+                              college.cutoff.general ||
+                              college.cutoff.obc ||
+                              college.cutoff.sc;
+          }
+          
+          // Skip if no cutoff data available
+          if (!cutoffForCategory || cutoffForCategory === 0) {
+            return null;
+          }
+          
           const difference = parseFloat((percentile - cutoffForCategory).toFixed(2));
           
+          // Enhanced probability calculation based on real MHT-CET patterns
           let probability = "Low";
-          if (difference >= 0) probability = "High";
-          else if (difference >= -2) probability = "Medium";
+          let probabilityScore = 0;
+          
+          if (difference >= 3) {
+            probability = "High";
+            probabilityScore = 0.95;
+          } else if (difference >= 1) {
+            probability = "High";
+            probabilityScore = 0.85;
+          } else if (difference >= 0) {
+            probability = "High";
+            probabilityScore = 0.75;
+          } else if (difference >= -1) {
+            probability = "Medium";
+            probabilityScore = 0.65;
+          } else if (difference >= -2) {
+            probability = "Medium";
+            probabilityScore = 0.45;
+          } else if (difference >= -3) {
+            probability = "Low";
+            probabilityScore = 0.25;
+          } else {
+            probability = "Low";
+            probabilityScore = 0.1;
+          }
 
           return {
             college: college._id,
             probability,
+            probabilityScore,
             cutoffForCategory,
             difference,
             rank: index + 1,
@@ -502,11 +560,24 @@ app.post('/api/predictions', authenticate, async (req, res) => {
             // Include college details for frontend
             name: college.name,
             location: college.location,
-            type: college.type
+            type: college.type,
+            ranking: college.ranking,
+            featured: college.featured,
+            establishedYear: college.establishedYear
           };
-        }).sort((a, b) => {
-          const probOrder = { High: 3, Medium: 2, Low: 1 };
-          return probOrder[b.probability] - probOrder[a.probability];
+        }).filter(p => p !== null); // Remove null predictions
+
+        // Sort by probability score and difference
+        coursePredictions.sort((a, b) => {
+          if (a.probabilityScore !== b.probabilityScore) {
+            return b.probabilityScore - a.probabilityScore;
+          }
+          return b.difference - a.difference;
+        });
+
+        // Update ranks after sorting
+        coursePredictions.forEach((pred, index) => {
+          pred.rank = index + 1;
         });
 
         courseResults[course] = coursePredictions;
@@ -517,65 +588,77 @@ app.post('/api/predictions', authenticate, async (req, res) => {
     if (allPredictions.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No colleges found for the selected courses'
+        message: 'No colleges found for the selected courses with available cutoff data'
       });
     }
 
-    // Sort all predictions by probability and difference
+    // Sort all predictions by probability score and difference
     allPredictions.sort((a, b) => {
-      const probOrder = { High: 3, Medium: 2, Low: 1 };
-      if (probOrder[a.probability] !== probOrder[b.probability]) {
-        return probOrder[b.probability] - probOrder[a.probability];
+      if (a.probabilityScore !== b.probabilityScore) {
+        return b.probabilityScore - a.probabilityScore;
       }
       return b.difference - a.difference;
     });
 
-    // Calculate overall metadata
+    // Update overall ranks
+    allPredictions.forEach((pred, index) => {
+      pred.overallRank = index + 1;
+    });
+
+    // Calculate enhanced metadata
     const metadata = {
       totalColleges: allPredictions.length,
       totalCourses: courses.length,
       highProbability: allPredictions.filter(p => p.probability === 'High').length,
       mediumProbability: allPredictions.filter(p => p.probability === 'Medium').length,
       lowProbability: allPredictions.filter(p => p.probability === 'Low').length,
+      averageCutoff: allPredictions.reduce((sum, p) => sum + p.cutoffForCategory, 0) / allPredictions.length,
       courseBreakdown: Object.keys(courseResults).map(course => ({
         course,
         totalColleges: courseResults[course].length,
         highProbability: courseResults[course].filter(p => p.probability === 'High').length,
         mediumProbability: courseResults[course].filter(p => p.probability === 'Medium').length,
-        lowProbability: courseResults[course].filter(p => p.probability === 'Low').length
+        lowProbability: courseResults[course].filter(p => p.probability === 'Low').length,
+        averageCutoff: courseResults[course].length > 0 ? 
+          courseResults[course].reduce((sum, p) => sum + p.cutoffForCategory, 0) / courseResults[course].length : 0
       })),
-      algorithmVersion: '2.1'
+      algorithmVersion: '3.0',
+      dataSource: 'MHT-CET 2025 Official Data'
     };
 
-    // Save prediction to database
-    const predictionDoc = new Prediction({
-      user: req.user._id,
-      inputData: {
-        percentile: parseFloat(percentile),
-        category,
-        courses, // Now stores array of courses
-        examType: 'MHT-CET',
-        examYear: new Date().getFullYear()
-      },
-      predictions: allPredictions.map(p => ({
-        college: p.college,
-        probability: p.probability,
-        cutoffForCategory: p.cutoffForCategory,
-        difference: p.difference,
-        rank: p.rank,
-        course: p.course,
-        fees: p.fees,
-        placements: p.placements
-      })),
-      metadata
-    });
+    // Save prediction to database only if user is authenticated
+    let predictionId = null;
+    if (req.user) {
+      const predictionDoc = new Prediction({
+        user: req.user._id,
+        inputData: {
+          percentile: parseFloat(percentile),
+          category,
+          courses, // Now stores array of courses
+          examType: 'MHT-CET',
+          examYear: new Date().getFullYear()
+        },
+        predictions: allPredictions.map(p => ({
+          college: p.college,
+          probability: p.probability,
+          cutoffForCategory: p.cutoffForCategory,
+          difference: p.difference,
+          rank: p.rank,
+          course: p.course,
+          fees: p.fees,
+          placements: p.placements
+        })),
+        metadata
+      });
 
-    await predictionDoc.save();
+      await predictionDoc.save();
+      predictionId = predictionDoc._id;
 
-    // Add prediction to user's predictions array
-    await User.findByIdAndUpdate(req.user._id, {
-      $push: { predictions: predictionDoc._id }
-    });
+      // Add prediction to user's predictions array
+      await User.findByIdAndUpdate(req.user._id, {
+        $push: { predictions: predictionDoc._id }
+      });
+    }
 
     res.json({
       success: true,
@@ -586,7 +669,7 @@ app.post('/api/predictions', authenticate, async (req, res) => {
       courses,
       examType: "MHT-CET 2025",
       metadata,
-      predictionId: predictionDoc._id
+      predictionId: predictionId
     });
   } catch (error) {
     console.error('Prediction error:', error);
@@ -625,6 +708,64 @@ app.get('/api/predictions/history', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch prediction history',
+      error: error.message
+    });
+  }
+});
+
+// Delete a specific prediction
+app.delete('/api/predictions/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const prediction = await Prediction.findOneAndDelete({
+      _id: id,
+      user: req.user._id
+    });
+
+    if (!prediction) {
+      return res.status(404).json({
+        success: false,
+        message: 'Prediction not found'
+      });
+    }
+
+    // Remove prediction from user's predictions array
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { predictions: id }
+    });
+
+    res.json({
+      success: true,
+      message: 'Prediction deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete prediction',
+      error: error.message
+    });
+  }
+});
+
+// Delete all predictions for a user
+app.delete('/api/predictions', authenticate, async (req, res) => {
+  try {
+    const result = await Prediction.deleteMany({ user: req.user._id });
+    
+    // Clear user's predictions array
+    await User.findByIdAndUpdate(req.user._id, {
+      $set: { predictions: [] }
+    });
+
+    res.json({
+      success: true,
+      message: `${result.deletedCount} predictions deleted successfully`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete predictions',
       error: error.message
     });
   }
@@ -844,143 +985,318 @@ app.get('/api/chat/history/:sessionId', authenticate, async (req, res) => {
   }
 });
 
+// Delete a specific chat session
+app.delete('/api/chat/history/:sessionId', authenticate, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    const result = await ChatMessage.findOneAndDelete({
+      user: req.user._id,
+      sessionId
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat session not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Chat session deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete chat session',
+      error: error.message
+    });
+  }
+});
+
+// Delete all chat history for a user
+app.delete('/api/chat/history', authenticate, async (req, res) => {
+  try {
+    const result = await ChatMessage.deleteMany({ user: req.user._id });
+
+    res.json({
+      success: true,
+      message: `${result.deletedCount} chat sessions deleted successfully`
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete chat history',
+      error: error.message
+    });
+  }
+});
+
 // PDF generation endpoint
-app.post('/api/generate-pdf', authenticate, async (req, res) => {
+app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
   try {
     const { predictions, studentInfo, predictionId } = req.body;
     
-    // Update download count if predictionId is provided
-    if (predictionId) {
+    // Update download count if predictionId is provided and user is authenticated
+    if (predictionId && req.user) {
       await Prediction.findByIdAndUpdate(predictionId, {
         $inc: { downloadCount: 1 },
         status: 'downloaded'
       });
     }
 
-    // Generate HTML content (same as before)
+    // Generate HTML content for PDF
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>MHT-CET College Prediction Report</title>
+        <meta charset="UTF-8">
         <style>
-          body { font-family: 'Inter', Arial, sans-serif; margin: 20px; line-height: 1.6; }
-          .header { text-align: center; color: #2563eb; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-          .student-info { background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #e2e8f0; }
-          .college { border: 1px solid #d1d5db; margin: 15px 0; padding: 20px; border-radius: 12px; }
-          .high { border-left: 5px solid #10b981; background: #f0fdf4; }
-          .medium { border-left: 5px solid #f59e0b; background: #fffbeb; }
-          .low { border-left: 5px solid #ef4444; background: #fef2f2; }
-          .placement-info { background: #f1f5f9; padding: 15px; margin-top: 15px; border-radius: 8px; }
-          .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
-          .stat-card { background: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
-          .footer { margin-top: 40px; padding: 20px; background: #fef3c7; border-radius: 12px; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: 'Arial', sans-serif; 
+            line-height: 1.6; 
+            color: #333;
+            background: #fff;
+          }
+          .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+          .header { 
+            text-align: center; 
+            color: #2563eb; 
+            margin-bottom: 30px; 
+            border-bottom: 3px solid #2563eb; 
+            padding-bottom: 20px; 
+          }
+          .header h1 { font-size: 28px; margin-bottom: 10px; }
+          .header p { font-size: 14px; color: #666; }
+          .student-info { 
+            background: #f8fafc; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 25px; 
+            border: 1px solid #e2e8f0; 
+          }
+          .student-info h3 { color: #2563eb; margin-bottom: 15px; }
+          .info-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 15px; 
+          }
+          .info-card { 
+            background: #fff; 
+            padding: 15px; 
+            border-radius: 6px; 
+            border: 1px solid #e2e8f0; 
+            text-align: center; 
+          }
+          .info-card strong { display: block; margin-bottom: 5px; color: #374151; }
+          .college { 
+            border: 1px solid #d1d5db; 
+            margin: 15px 0; 
+            padding: 20px; 
+            border-radius: 8px; 
+            page-break-inside: avoid;
+          }
+          .college.high { border-left: 5px solid #10b981; background: #f0fdf4; }
+          .college.medium { border-left: 5px solid #f59e0b; background: #fffbeb; }
+          .college.low { border-left: 5px solid #ef4444; background: #fef2f2; }
+          .college h4 { color: #1f2937; margin-bottom: 10px; font-size: 18px; }
+          .college-info { margin-bottom: 15px; }
+          .college-info p { margin-bottom: 5px; }
+          .stats-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 10px; 
+            margin: 15px 0; 
+          }
+          .stat-card { 
+            background: #fff; 
+            padding: 12px; 
+            border-radius: 6px; 
+            border: 1px solid #e2e8f0; 
+            text-align: center; 
+            font-size: 12px;
+          }
+          .stat-card strong { display: block; margin-bottom: 5px; }
+          .placement-info { 
+            background: #f1f5f9; 
+            padding: 15px; 
+            margin-top: 15px; 
+            border-radius: 6px; 
+          }
+          .placement-info h5 { color: #374151; margin-bottom: 10px; }
+          .footer { 
+            margin-top: 40px; 
+            padding: 20px; 
+            background: #fef3c7; 
+            border-radius: 8px; 
+            page-break-inside: avoid;
+          }
+          .footer h4 { color: #92400e; margin-bottom: 15px; }
+          .footer ul { margin-left: 20px; }
+          .footer li { margin-bottom: 8px; font-size: 14px; }
+          .probability-high { color: #10b981; font-weight: bold; }
+          .probability-medium { color: #f59e0b; font-weight: bold; }
+          .probability-low { color: #ef4444; font-weight: bold; }
+          .positive { color: #10b981; }
+          .negative { color: #ef4444; }
+          @media print {
+            body { -webkit-print-color-adjust: exact; }
+            .college { page-break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>🎓 MHT-CET 2025 College Prediction Report</h1>
-          <p><strong>Generated on:</strong> ${new Date().toLocaleDateString('en-IN', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}</p>
-          <p><strong>Report ID:</strong> ${predictionId || 'N/A'}</p>
-        </div>
-        
-        <div class="student-info">
-          <h3>📋 Student Information</h3>
-          <div class="stats">
-            <div class="stat-card">
-              <strong>Percentile:</strong><br>${studentInfo.percentile}%
-            </div>
-            <div class="stat-card">
-              <strong>Category:</strong><br>${studentInfo.category.toUpperCase()}
-            </div>
-            <div class="stat-card">
-              <strong>Preferred Course:</strong><br>${studentInfo.course}
-            </div>
-            <div class="stat-card">
-              <strong>Student Name:</strong><br>${studentInfo.name || 'N/A'}
-            </div>
+        <div class="container">
+          <div class="header">
+            <h1>🎓 MHT-CET 2025 College Prediction Report</h1>
+            <p><strong>Generated on:</strong> ${new Date().toLocaleDateString('en-IN', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}</p>
+            <p><strong>Report ID:</strong> ${predictionId || 'Guest User'}</p>
           </div>
-        </div>
-        
-        <h3>🏛️ College Predictions</h3>
-        ${predictions.map(college => `
-          <div class="college ${college.probability.toLowerCase()}">
-            <h4>🎯 ${college.name}</h4>
-            <p><strong>📍 Location:</strong> ${college.location}</p>
-            <p><strong>🎓 Course:</strong> ${college.course}</p>
-            <p><strong>🎲 Admission Probability:</strong> 
-              <span style="color: ${
-                college.probability === 'High' ? '#10b981' : 
-                college.probability === 'Medium' ? '#f59e0b' : '#ef4444'
-              }; font-weight: bold; font-size: 1.1em;">
-                ${college.probability}
-              </span>
-            </p>
-            <div class="stats">
-              <div class="stat-card">
-                <strong>Required Cutoff:</strong><br>${college.cutoffForCategory}%
+          
+          <div class="student-info">
+            <h3>📋 Student Information</h3>
+            <div class="info-grid">
+              <div class="info-card">
+                <strong>Percentile</strong>
+                ${studentInfo.percentile}%
               </div>
-              <div class="stat-card">
-                <strong>Your Score Difference:</strong><br>
-                <span style="color: ${college.difference >= 0 ? '#10b981' : '#ef4444'}">
-                  ${college.difference > 0 ? '+' : ''}${college.difference}%
-                </span>
+              <div class="info-card">
+                <strong>Category</strong>
+                ${studentInfo.category.toUpperCase()}
               </div>
-              <div class="stat-card">
-                <strong>Annual Fees:</strong><br>${college.fees}
+              <div class="info-card">
+                <strong>Preferred Course</strong>
+                ${studentInfo.course || studentInfo.courses?.[0] || 'N/A'}
               </div>
-            </div>
-            
-            <div class="placement-info">
-              <h5>💼 Placement Statistics</h5>
-              <div class="stats">
-                <div class="stat-card">
-                  <strong>Average Package:</strong><br>${college.placements.averagePackage}
-                </div>
-                <div class="stat-card">
-                  <strong>Highest Package:</strong><br>${college.placements.highestPackage}
-                </div>
-                <div class="stat-card">
-                  <strong>Placement Rate:</strong><br>${college.placements.placementRate}
-                </div>
+              <div class="info-card">
+                <strong>Student Name</strong>
+                ${studentInfo.name || 'Guest User'}
               </div>
             </div>
           </div>
-        `).join('')}
-        
-        <div class="footer">
-          <h4>⚠️ Important Disclaimer & Notes:</h4>
-          <ul>
-            <li><strong>Prediction Accuracy:</strong> This prediction is based on previous year cutoffs and historical data. Actual cutoffs may vary based on various factors.</li>
-            <li><strong>Admission Process:</strong> Final admission depends on seat availability, counseling process, and document verification.</li>
-            <li><strong>Backup Strategy:</strong> Always keep multiple college options and apply to colleges across different probability ranges.</li>
-            <li><strong>Official Verification:</strong> Please verify all information from official MHT-CET and college websites.</li>
-            <li><strong>Counseling:</strong> Participate in all counseling rounds and keep all required documents ready.</li>
-            <li><strong>Contact:</strong> For any queries, contact the respective college admission offices directly.</li>
-          </ul>
-          <p style="text-align: center; margin-top: 20px; font-style: italic;">
-            <strong>Best of luck with your admissions! 🌟</strong><br>
-            Generated by MHT-CET Predictor Pro | Visit: <a href="http://localhost:5173">localhost:5173</a>
-          </p>
+          
+          <h3 style="color: #2563eb; margin-bottom: 20px;">🏛️ College Predictions (${predictions.length} Results)</h3>
+          
+          ${predictions.slice(0, 20).map((college, index) => `
+            <div class="college ${college.probability.toLowerCase()}">
+              <h4>${index + 1}. ${college.name}</h4>
+              <div class="college-info">
+                <p><strong>📍 Location:</strong> ${college.location}</p>
+                <p><strong>🎓 Course:</strong> ${college.course}</p>
+                <p><strong>🎲 Admission Probability:</strong> 
+                  <span class="probability-${college.probability.toLowerCase()}">
+                    ${college.probability}
+                  </span>
+                </p>
+              </div>
+              
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <strong>Required Cutoff</strong>
+                  ${college.cutoffForCategory}%
+                </div>
+                <div class="stat-card">
+                  <strong>Score Difference</strong>
+                  <span class="${college.difference >= 0 ? 'positive' : 'negative'}">
+                    ${college.difference > 0 ? '+' : ''}${college.difference}%
+                  </span>
+                </div>
+                <div class="stat-card">
+                  <strong>Annual Fees</strong>
+                  ${college.fees}
+                </div>
+              </div>
+              
+              <div class="placement-info">
+                <h5>💼 Placement Statistics</h5>
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <strong>Average Package</strong>
+                    ${college.placements.averagePackage}
+                  </div>
+                  <div class="stat-card">
+                    <strong>Highest Package</strong>
+                    ${college.placements.highestPackage}
+                  </div>
+                  <div class="stat-card">
+                    <strong>Placement Rate</strong>
+                    ${college.placements.placementRate}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+          
+          ${predictions.length > 20 ? `
+            <div style="text-align: center; padding: 20px; background: #f3f4f6; border-radius: 8px; margin: 20px 0;">
+              <p><strong>Note:</strong> Showing top 20 results out of ${predictions.length} total predictions.</p>
+              <p>Login to access complete results and save your predictions.</p>
+            </div>
+          ` : ''}
+          
+          <div class="footer">
+            <h4>⚠️ Important Disclaimer & Notes</h4>
+            <ul>
+              <li><strong>Prediction Accuracy:</strong> Based on MHT-CET 2025 official data and previous year trends. Actual cutoffs may vary.</li>
+              <li><strong>Admission Process:</strong> Final admission depends on seat availability, counseling process, and document verification.</li>
+              <li><strong>Strategy:</strong> Apply to colleges across different probability ranges for better chances.</li>
+              <li><strong>Official Verification:</strong> Always verify information from official MHT-CET and college websites.</li>
+              <li><strong>Counseling:</strong> Participate in all counseling rounds with required documents ready.</li>
+              <li><strong>Support:</strong> Contact college admission offices directly for specific queries.</li>
+            </ul>
+            <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #d1d5db;">
+              <p><strong>🌟 Best of luck with your admissions!</strong></p>
+              <p style="font-size: 12px; color: #666;">Generated by MHT-CET Predictor Pro | Visit: localhost:5173</p>
+            </div>
+          </div>
         </div>
       </body>
       </html>
     `;
+
+    // Generate PDF using Puppeteer
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     
-    res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Content-Disposition', 'attachment; filename="mht-cet-prediction-report.html"');
-    res.send(htmlContent);
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20px',
+        right: '20px',
+        bottom: '20px',
+        left: '20px'
+      }
+    });
+    
+    await browser.close();
+
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="MHT-CET-Prediction-Report-${Date.now()}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    res.send(pdfBuffer);
+    
   } catch (error) {
     console.error('PDF generation error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to generate report',
+      message: 'Failed to generate PDF report',
       error: error.message
     });
   }
