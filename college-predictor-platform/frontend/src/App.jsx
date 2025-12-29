@@ -17,6 +17,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [showHistoryView, setShowHistoryView] = useState(false);
+  const [collegesDisplayLimit, setCollegesDisplayLimit] = useState(24);
   const chatMessagesEndRef = useRef(null);
 
   // Chat states
@@ -24,7 +25,7 @@ function App() {
     {
       id: 1,
       type: 'bot',
-      message: '🎉 Welcome to MHT-CET Pro! I\'m your comprehensive AI assistant with extensive knowledge about Maharashtra engineering colleges. I can help you with college information, admissions, cutoffs, placements, fees, scholarships, and much more. How can I assist you today?',
+      message: '🎓 Welcome to MHT-CET Pro AI Assistant! I\'m your professional engineering college guidance system with comprehensive knowledge of 328+ Maharashtra colleges. I can provide expert insights on admissions, cutoffs, placements, fees, scholarships, and career guidance. How may I assist you with your engineering college journey today?',
       timestamp: new Date()
     }
   ]);
@@ -40,7 +41,7 @@ function App() {
     percentile: '',
     category: 'General',
     courses: ['Computer Engineering'], // Changed to array for multiple selection
-    universityType: 'All',
+    universityType: 'Home University',
     includeLadies: false,
     includeTFWS: false
   });
@@ -171,7 +172,7 @@ function App() {
       {
         id: 1,
         type: 'bot',
-        message: '🎉 Welcome to MHT-CET Pro! I\'m your comprehensive AI assistant with extensive knowledge about Maharashtra engineering colleges. I can help you with college information, admissions, cutoffs, placements, fees, scholarships, and much more. How can I assist you today?',
+        message: '🎓 Welcome to MHT-CET Pro AI Assistant! I\'m your professional engineering college guidance system with comprehensive knowledge of 328+ Maharashtra colleges. I can provide expert insights on admissions, cutoffs, placements, fees, scholarships, and career guidance. How may I assist you with your engineering college journey today?',
         timestamp: new Date()
       }
     ]);
@@ -1025,11 +1026,26 @@ function App() {
                           onChange={(e) => setFormData({...formData, category: e.target.value})}
                           className="input-pro focus-ring-pro"
                         >
-                          <option value="General">General</option>
-                          <option value="OBC">OBC</option>
-                          <option value="SC">SC</option>
-                          <option value="ST">ST</option>
-                          <option value="EWS">EWS</option>
+                          <option value="General">General Open (GOPENS)</option>
+                          <option value="OBC">Other Backward Class (OBC)</option>
+                          <option value="SC">Scheduled Caste (SC)</option>
+                          <option value="ST">Scheduled Tribe (ST)</option>
+                          <option value="EWS">Economically Weaker Section (EWS)</option>
+                          <option value="VJNT">Vimukta Jati & Nomadic Tribes (VJNT)</option>
+                          <option value="NT1">Nomadic Tribe 1 (NT1)</option>
+                          <option value="NT2">Nomadic Tribe 2 (NT2)</option>
+                          <option value="NT3">Nomadic Tribe 3 (NT3)</option>
+                          <option value="SEBC">Socially & Educationally Backward Class (SEBC)</option>
+                          <option value="TFWS">Tuition Fee Waiver Scheme (TFWS)</option>
+                          <option value="Ladies_General">Ladies General Open</option>
+                          <option value="Ladies_OBC">Ladies OBC</option>
+                          <option value="Ladies_SC">Ladies SC</option>
+                          <option value="Ladies_ST">Ladies ST</option>
+                          <option value="Ladies_VJNT">Ladies VJNT</option>
+                          <option value="Ladies_NT1">Ladies NT1</option>
+                          <option value="Ladies_NT2">Ladies NT2</option>
+                          <option value="Ladies_NT3">Ladies NT3</option>
+                          <option value="Ladies_SEBC">Ladies SEBC</option>
                         </select>
                       </div>
 
@@ -1038,16 +1054,15 @@ function App() {
                           🏛️ University Type
                         </label>
                         <select
-                          value={formData.universityType || 'All'}
+                          value={formData.universityType || 'Home University'}
                           onChange={(e) => setFormData({...formData, universityType: e.target.value})}
                           className="input-pro focus-ring-pro"
                         >
-                          <option value="All">All Universities</option>
-                          <option value="State">State Level</option>
                           <option value="Home University">Home University</option>
+                          <option value="Other Than Home University">Other Than Home University</option>
                         </select>
                         <div className="mt-1 text-xs text-gray-500">
-                          Home University: For students from specific university regions
+                          Home University: For students from the same university region
                         </div>
                       </div>
 
@@ -1236,11 +1251,11 @@ function App() {
                     🏛️ Engineering Colleges
                   </h3>
                   <p style={{ color: '#64748b', fontSize: '1.1rem', margin: '0.5rem 0 0 0' }}>
-                    Explore Maharashtra's top engineering institutions
+                    Explore Maharashtra's top engineering institutions with comprehensive data from 2025 MHT-CET
                   </p>
                 </div>
                 <div className="glass-card" style={{ padding: '1rem 1.5rem', borderRadius: '15px', background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: '#ffffff' }}>
-                  <strong>{colleges.length}+ Colleges</strong>
+                  <strong>{searchTerm ? `${filteredColleges.length} of ${colleges.length}` : `${colleges.length}`} Colleges</strong>
                 </div>
               </div>
 
@@ -1250,7 +1265,10 @@ function App() {
                   type="text"
                   placeholder="🔍 Search colleges by name or location..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCollegesDisplayLimit(24); // Reset display limit when searching
+                  }}
                   className="neon-blue"
                   style={{
                     width: '100%', padding: '1rem 1.5rem', border: '2px solid #e2e8f0',
@@ -1261,7 +1279,7 @@ function App() {
 
               {/* Colleges Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem' }}>
-                {filteredColleges.slice(0, 12).map((college, index) => (
+                {filteredColleges.slice(0, collegesDisplayLimit).map((college, index) => (
                   <div key={college.id || index} className="glass-card card-hover-lift animate-slide-bottom" style={{
                     padding: '2rem', borderRadius: '20px', cursor: 'pointer',
                     animationDelay: `${index * 0.1}s`
@@ -1322,6 +1340,19 @@ function App() {
                   </div>
                 ))}
               </div>
+
+              {/* Load More Button */}
+              {filteredColleges.length > collegesDisplayLimit && (
+                <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                  <button
+                    onClick={() => setCollegesDisplayLimit(prev => prev + 24)}
+                    className="btn-modern animate-pulse-glow"
+                    style={{ padding: '1rem 2rem', fontSize: '1rem' }}
+                  >
+                    📚 Load More Colleges ({filteredColleges.length - collegesDisplayLimit} remaining)
+                  </button>
+                </div>
+              )}
 
               {filteredColleges.length === 0 && (
                 <div className="animate-zoom-in" style={{ textAlign: 'center', padding: '4rem' }}>
@@ -2148,17 +2179,123 @@ function App() {
             </div>
           )}
 
-          {/* Professional Chat Tab with History */}
+          {/* Professional AI Assistant Tab */}
           {activeTab === 'chat' && (
             <div className="animate-fade-in-pro" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <div className="text-center mb-8">
-                <h3 className="gradient-text-pro text-5xl font-black mb-4">
-                  🤖 AI Assistant
-                </h3>
-                <p className="text-gray-600 text-lg font-medium">
-                  Your comprehensive guide to Maharashtra engineering colleges with extensive knowledge base
-                </p>
+              {/* Professional Header */}
+              <div className="glass-card-pro animate-slide-top" style={{ 
+                padding: '2rem', 
+                marginBottom: '2rem', 
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ 
+                    width: '60px', 
+                    height: '60px', 
+                    borderRadius: '50%', 
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '2rem'
+                  }}>
+                    🤖
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '2.5rem', fontWeight: '800', margin: 0 }}>
+                      MHT-CET AI Assistant
+                    </h2>
+                    <p style={{ fontSize: '1.1rem', margin: '0.5rem 0 0 0', opacity: 0.9 }}>
+                      Professional Engineering College Guidance System
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Capabilities */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                  gap: '1rem',
+                  marginTop: '1.5rem'
+                }}>
+                  <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.1)' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🎯</div>
+                    <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Smart Predictions</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>AI-powered college recommendations</div>
+                  </div>
+                  <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.1)' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📊</div>
+                    <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Real-time Data</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>2025 MHT-CET cutoffs & trends</div>
+                  </div>
+                  <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.1)' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>💼</div>
+                    <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Career Guidance</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>Placement insights & advice</div>
+                  </div>
+                  <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.1)' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🎓</div>
+                    <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>Expert Knowledge</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>328+ colleges database</div>
+                  </div>
+                </div>
               </div>
+
+              {/* Quick Actions */}
+              {!user && (
+                <div className="glass-card animate-slide-top" style={{ 
+                  padding: '1.5rem', 
+                  marginBottom: '2rem', 
+                  borderRadius: '15px',
+                  background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ fontSize: '2rem' }}>⚡</div>
+                    <div>
+                      <h4 style={{ margin: 0, color: '#8b4513', fontWeight: '700' }}>Quick Start</h4>
+                      <p style={{ margin: '0.25rem 0 0 0', color: '#a0522d', fontSize: '0.9rem' }}>
+                        Try these popular questions or login for personalized assistance
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                    gap: '0.75rem',
+                    marginTop: '1rem'
+                  }}>
+                    {[
+                      "What are the cutoffs for Computer Engineering?",
+                      "Compare COEP vs VJTI placements",
+                      "Best colleges for Mechanical Engineering",
+                      "Scholarship options for OBC category"
+                    ].map((question, index) => (
+                      <button
+                        key={index}
+                        onClick={() => {
+                          setChatInput(question);
+                          if (user) handleChatSubmit({ preventDefault: () => {} });
+                        }}
+                        className="btn-secondary-pro"
+                        style={{ 
+                          padding: '0.75rem 1rem', 
+                          fontSize: '0.8rem', 
+                          textAlign: 'left',
+                          background: 'rgba(255, 255, 255, 0.8)',
+                          color: '#8b4513',
+                          border: '1px solid rgba(139, 69, 19, 0.2)'
+                        }}
+                      >
+                        💡 {question}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 'var(--space-6)', height: '100%' }}>
                 {/* Chat History Sidebar */}
@@ -2199,28 +2336,61 @@ function App() {
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                           {chatHistory.map((session, index) => (
-                            <button
+                            <div
                               key={session.sessionId}
-                              onClick={() => loadChatSession(session.sessionId)}
                               className="card-pro"
                               style={{
                                 padding: 'var(--space-3)',
-                                textAlign: 'left',
-                                cursor: 'pointer',
                                 border: session.sessionId === chatSessionId ? '2px solid var(--primary-500)' : '1px solid var(--gray-200)',
-                                background: session.sessionId === chatSessionId ? 'var(--primary-50)' : 'white'
+                                background: session.sessionId === chatSessionId ? 'var(--primary-50)' : 'white',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start'
                               }}
                             >
-                              <div className="font-semibold text-sm text-gray-800 mb-1">
-                                Session {index + 1}
+                              <div
+                                onClick={() => loadChatSession(session.sessionId)}
+                                style={{
+                                  flex: 1,
+                                  cursor: 'pointer',
+                                  textAlign: 'left'
+                                }}
+                              >
+                                <div className="font-semibold text-sm text-gray-800 mb-1">
+                                  Session {index + 1}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {new Date(session.lastMessage).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs text-gray-600 mt-1 truncate">
+                                  {session.preview}
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-500">
-                                {new Date(session.lastMessage).toLocaleDateString()}
-                              </div>
-                              <div className="text-xs text-gray-600 mt-1 truncate">
-                                {session.preview}
-                              </div>
-                            </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm('Are you sure you want to delete this chat session? This action cannot be undone.')) {
+                                    deleteChatSession(session.sessionId);
+                                  }
+                                }}
+                                className="btn-secondary-pro"
+                                style={{ 
+                                  fontSize: '0.75rem', 
+                                  padding: 'var(--space-1) var(--space-2)',
+                                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                  color: 'white',
+                                  border: 'none',
+                                  minWidth: '24px',
+                                  height: '24px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                                title="Delete this chat session"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -2228,41 +2398,79 @@ function App() {
                   </div>
                 )}
 
-                {/* Main Chat Container */}
+                {/* Professional Main Chat Container */}
                 <div className="card-pro" style={{ 
                   flex: 1, 
                   display: 'flex', 
-                  flexDirection: 'column'
+                  flexDirection: 'column',
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                  border: '2px solid rgba(102, 126, 234, 0.1)',
+                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
                 }}>
-                  {/* Chat Header */}
+                  {/* Professional Chat Header */}
                   <div className="card-header-pro" style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
-                    justifyContent: 'space-between' 
+                    justifyContent: 'space-between',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    padding: '1.5rem',
+                    borderRadius: '15px 15px 0 0'
                   }}>
-                    <div>
-                      <h4 className="font-bold text-gray-800 m-0">
-                        {user ? `Chat Session` : 'AI Assistant'}
-                      </h4>
-                      <p className="text-sm text-gray-500 m-0">
-                        {user ? `Session ID: ${chatSessionId?.slice(-8) || 'New'}` : 'Login to save chat history'}
-                      </p>
-                    </div>
-                    {user && chatMessages.length > 1 && (
-                      <div className="badge-success">
-                        {chatMessages.length - 1} messages
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <div style={{ 
+                        width: '40px', 
+                        height: '40px', 
+                        borderRadius: '50%', 
+                        background: 'rgba(255, 255, 255, 0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.2rem'
+                      }}>
+                        🤖
                       </div>
-                    )}
+                      <div>
+                        <h4 className="font-bold m-0" style={{ fontSize: '1.1rem' }}>
+                          {user ? `Professional AI Assistant` : 'MHT-CET AI Assistant'}
+                        </h4>
+                        <p className="text-sm m-0" style={{ opacity: 0.9, fontSize: '0.85rem' }}>
+                          {user ? `Session: ${chatSessionId?.slice(-8) || 'New'} • Online` : 'Login for personalized assistance'}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {user && chatMessages.length > 1 && (
+                        <div style={{
+                          background: 'rgba(255, 255, 255, 0.2)',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600'
+                        }}>
+                          💬 {chatMessages.length - 1} messages
+                        </div>
+                      )}
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        background: '#10b981',
+                        animation: 'pulse 2s infinite'
+                      }}></div>
+                    </div>
                   </div>
 
-                  {/* Chat Messages */}
+                  {/* Professional Chat Messages */}
                   <div className="card-body-pro chat-scroll" style={{ 
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
                     gap: 'var(--space-4)',
                     maxHeight: '500px',
-                    overflowY: 'auto'
+                    overflowY: 'auto',
+                    padding: '2rem',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)'
                   }}>
                     {chatMessages.map((msg, index) => (
                       <div 
@@ -2271,46 +2479,142 @@ function App() {
                         style={{
                           display: 'flex', 
                           justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start',
-                          animationDelay: `${index * 0.05}s`
+                          animationDelay: `${index * 0.05}s`,
+                          alignItems: 'flex-end',
+                          gap: '0.75rem'
                         }}
                       >
+                        {/* AI Avatar */}
+                        {msg.type === 'bot' && (
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '1rem',
+                            flexShrink: 0
+                          }}>
+                            🤖
+                          </div>
+                        )}
+                        
                         <div 
                           className="card-pro"
                           style={{
                             maxWidth: '75%', 
-                            padding: 'var(--space-4) var(--space-5)',
+                            padding: msg.type === 'user' ? 'var(--space-4) var(--space-5)' : 'var(--space-4) var(--space-5)',
                             background: msg.type === 'user' ? 
-                              'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)' : 
-                              'white',
+                              'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 
+                              'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
                             color: msg.type === 'user' ? '#ffffff' : 'var(--gray-800)',
-                            border: msg.type === 'user' ? 'none' : '1px solid var(--gray-200)'
+                            border: msg.type === 'user' ? 'none' : '2px solid rgba(102, 126, 234, 0.1)',
+                            borderRadius: msg.type === 'user' ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
+                            boxShadow: msg.type === 'user' ? 
+                              '0 10px 25px rgba(102, 126, 234, 0.3)' : 
+                              '0 5px 15px rgba(0, 0, 0, 0.08)'
                           }}
                         >
-                          <div className="text-base font-medium leading-relaxed mb-2">
+                          <div className="text-base font-medium leading-relaxed mb-2" style={{
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
+                          }}>
                             {msg.message}
                           </div>
                           <div 
                             className="text-xs opacity-75"
                             style={{ 
                               textAlign: msg.type === 'user' ? 'right' : 'left',
-                              color: msg.type === 'user' ? 'rgba(255, 255, 255, 0.8)' : 'var(--gray-500)'
+                              color: msg.type === 'user' ? 'rgba(255, 255, 255, 0.8)' : 'var(--gray-500)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start',
+                              gap: '0.5rem'
                             }}
                           >
-                            {new Date(msg.timestamp).toLocaleTimeString()}
+                            {msg.type === 'bot' && (
+                              <span style={{ fontSize: '0.7rem' }}>🤖 AI Assistant</span>
+                            )}
+                            <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
                           </div>
                         </div>
+
+                        {/* User Avatar */}
+                        {msg.type === 'user' && user && (
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontSize: '1rem',
+                            fontWeight: '700',
+                            flexShrink: 0
+                          }}>
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                       </div>
                     ))}
                     
                     {chatLoading && (
-                      <div className="animate-slide-in-pro" style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                        <div className="card-pro animate-pulse" style={{
-                          padding: 'var(--space-4) var(--space-5)',
-                          background: 'var(--gray-50)',
-                          border: '1px solid var(--gray-200)'
+                      <div className="animate-slide-in-pro" style={{ 
+                        display: 'flex', 
+                        justifyContent: 'flex-start',
+                        alignItems: 'flex-end',
+                        gap: '0.75rem'
+                      }}>
+                        {/* AI Avatar for loading */}
+                        <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '1rem',
+                          flexShrink: 0
                         }}>
-                          <div className="text-gray-600 font-medium">
-                            🤖 AI is thinking...
+                          🤖
+                        </div>
+                        
+                        <div className="card-pro" style={{
+                          padding: 'var(--space-4) var(--space-5)',
+                          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                          border: '2px solid rgba(102, 126, 234, 0.1)',
+                          borderRadius: '20px 20px 20px 5px',
+                          boxShadow: '0 5px 15px rgba(0, 0, 0, 0.08)'
+                        }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.75rem',
+                            color: '#667eea',
+                            fontWeight: '600'
+                          }}>
+                            <div className="animate-spin" style={{ 
+                              width: '20px', 
+                              height: '20px', 
+                              border: '2px solid #e5e7eb',
+                              borderTop: '2px solid #667eea',
+                              borderRadius: '50%'
+                            }}></div>
+                            <span>AI Assistant is analyzing your query...</span>
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.75rem', 
+                            color: '#9ca3af', 
+                            marginTop: '0.5rem' 
+                          }}>
+                            Processing 328+ colleges database
                           </div>
                         </div>
                       </div>
@@ -2319,37 +2623,114 @@ function App() {
                     <div ref={chatMessagesEndRef} />
                   </div>
 
-                  {/* Chat Input */}
-                  <div className="card-footer-pro">
+                  {/* Professional Chat Input */}
+                  <div className="card-footer-pro" style={{
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)',
+                    borderTop: '2px solid rgba(102, 126, 234, 0.1)',
+                    padding: '1.5rem'
+                  }}>
                     {!user && (
-                      <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                        <p className="text-yellow-800 font-medium text-sm m-0">
-                          💡 Login to save your chat history and access personalized assistance
-                        </p>
+                      <div className="mb-4 p-4" style={{
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        border: '2px solid #f59e0b',
+                        borderRadius: '15px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ fontSize: '1.5rem' }}>💡</div>
+                          <div>
+                            <p className="font-medium text-sm m-0" style={{ color: '#92400e' }}>
+                              🚀 Unlock Full AI Assistant Features
+                            </p>
+                            <p className="text-xs m-0 mt-1" style={{ color: '#a16207' }}>
+                              Login to save chat history, get personalized recommendations, and access advanced features
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                     
-                    <form onSubmit={handleChatSubmit} style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'flex-end' }}>
-                      <input
-                        type="text"
-                        placeholder="💬 Ask about colleges, admissions, placements, fees, scholarships, or any MHT-CET queries..."
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        disabled={chatLoading}
-                        className="input-pro focus-ring-pro"
-                        style={{ flex: 1 }}
-                      />
+                    <form onSubmit={handleChatSubmit} style={{ 
+                      display: 'flex', 
+                      gap: 'var(--space-4)', 
+                      alignItems: 'flex-end',
+                      background: 'white',
+                      padding: '1rem',
+                      borderRadius: '25px',
+                      border: '2px solid rgba(102, 126, 234, 0.2)',
+                      boxShadow: '0 5px 15px rgba(0, 0, 0, 0.08)'
+                    }}>
+                      <div style={{ flex: 1, position: 'relative' }}>
+                        <input
+                          type="text"
+                          placeholder="💬 Ask about colleges, admissions, cutoffs, placements, scholarships, or any MHT-CET queries..."
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          disabled={chatLoading}
+                          className="input-pro focus-ring-pro"
+                          style={{ 
+                            flex: 1,
+                            border: 'none',
+                            background: 'transparent',
+                            fontSize: '1rem',
+                            padding: '0.75rem 1rem',
+                            outline: 'none'
+                          }}
+                        />
+                        {chatInput && (
+                          <button
+                            type="button"
+                            onClick={() => setChatInput('')}
+                            style={{
+                              position: 'absolute',
+                              right: '1rem',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: 'none',
+                              border: 'none',
+                              color: '#9ca3af',
+                              cursor: 'pointer',
+                              fontSize: '1.2rem'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                       <button
                         type="submit"
                         disabled={chatLoading || !chatInput.trim()}
                         className={`btn-primary-pro focus-ring-pro ${(chatLoading || !chatInput.trim()) ? 'opacity-50' : ''}`}
                         style={{
-                          padding: 'var(--space-4) var(--space-5)', 
+                          padding: '0.75rem 1.5rem', 
                           fontSize: '1rem', 
-                          fontWeight: '600'
+                          fontWeight: '600',
+                          borderRadius: '20px',
+                          background: chatLoading || !chatInput.trim() ? 
+                            '#9ca3af' : 
+                            'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          border: 'none',
+                          color: 'white',
+                          cursor: chatLoading || !chatInput.trim() ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        {chatLoading ? '⏳' : '🚀'}
+                        {chatLoading ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div className="animate-spin" style={{ 
+                              width: '16px', 
+                              height: '16px', 
+                              border: '2px solid rgba(255, 255, 255, 0.3)',
+                              borderTop: '2px solid white',
+                              borderRadius: '50%'
+                            }}></div>
+                            <span>Sending</span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Send</span>
+                            <span>🚀</span>
+                          </div>
+                        )}
                       </button>
                     </form>
                   </div>

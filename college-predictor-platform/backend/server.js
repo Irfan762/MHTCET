@@ -318,7 +318,7 @@ app.get('/api/colleges', optionalAuth, async (req, res) => {
       minCutoff,
       maxCutoff,
       featured,
-      limit = 20,
+      limit = 500,
       page = 1,
       sort = 'featured'
     } = req.query;
@@ -493,21 +493,69 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
             (course.includes('Information') && c.name.includes('Information'))
           );
           
-          // Get category-specific cutoff with fallback logic
-          const categoryKey = category.toLowerCase();
-          let cutoffForCategory;
+          // Get category-specific cutoff with comprehensive mapping
+          const getCutoffForCategory = (college, course, category) => {
+            // Map frontend category values to database field names
+            const categoryMapping = {
+              'general': 'general',
+              'obc': 'obc', 
+              'sc': 'sc',
+              'st': 'st',
+              'ews': 'ews',
+              'vjnt': 'vjnt',
+              'nt1': 'nt1',
+              'nt2': 'nt2', 
+              'nt3': 'nt3',
+              'sebc': 'sebc',
+              'tfws': 'tfws',
+              'ladies_general': ['ladies', 'general'],
+              'ladies_obc': ['ladies', 'obc'],
+              'ladies_sc': ['ladies', 'sc'],
+              'ladies_st': ['ladies', 'st'],
+              'ladies_vjnt': ['ladies', 'vjnt'],
+              'ladies_nt1': ['ladies', 'nt1'],
+              'ladies_nt2': ['ladies', 'nt2'],
+              'ladies_nt3': ['ladies', 'nt3'],
+              'ladies_sebc': ['ladies', 'sebc']
+            };
+            
+            const categoryKey = category.toLowerCase();
+            const mapping = categoryMapping[categoryKey];
+            
+            let cutoff = null;
+            
+            // Try course-specific cutoff first
+            if (course && course.cutoff) {
+              if (Array.isArray(mapping)) {
+                // Handle nested categories like ladies
+                cutoff = course.cutoff[mapping[0]] && course.cutoff[mapping[0]][mapping[1]];
+              } else if (mapping) {
+                cutoff = course.cutoff[mapping];
+              }
+            }
+            
+            // Fallback to college cutoff
+            if (!cutoff && college.cutoff) {
+              if (Array.isArray(mapping)) {
+                cutoff = college.cutoff[mapping[0]] && college.cutoff[mapping[0]][mapping[1]];
+              } else if (mapping) {
+                cutoff = college.cutoff[mapping];
+              }
+            }
+            
+            // Final fallback to general category
+            if (!cutoff) {
+              if (course && course.cutoff && course.cutoff.general) {
+                cutoff = course.cutoff.general;
+              } else if (college.cutoff && college.cutoff.general) {
+                cutoff = college.cutoff.general;
+              }
+            }
+            
+            return cutoff;
+          };
           
-          if (specificCourse && specificCourse.cutoff) {
-            cutoffForCategory = specificCourse.cutoff[categoryKey] || 
-                              specificCourse.cutoff.general || 
-                              college.cutoff[categoryKey] || 
-                              college.cutoff.general;
-          } else {
-            cutoffForCategory = college.cutoff[categoryKey] || 
-                              college.cutoff.general ||
-                              college.cutoff.obc ||
-                              college.cutoff.sc;
-          }
+          const cutoffForCategory = getCutoffForCategory(college, specificCourse, category);
           
           // Skip if no cutoff data available
           if (!cutoffForCategory || cutoffForCategory === 0) {
@@ -797,7 +845,7 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
       response = `🏛️ **Veermata Jijabai Technological Institute (VJTI)**\n\n📍 **Location**: Mumbai, Maharashtra\n🏆 **Ranking**: #2 in Maharashtra for Engineering\n💰 **Fees**: ₹83,000/year (Government)\n📊 **Cutoff**: 99.3%+ for Computer Engineering\n💼 **Placements**: Average ₹11.5 LPA, Highest ₹42 LPA\n🏢 **Top Recruiters**: Google, Microsoft, Amazon, Infosys\n📚 **Popular Branches**: Computer, IT, Electronics, Mechanical\n\nNeed more details about admissions or specific branches?`;
       intent = 'college_specific';
     } else if (lowerMessage.includes('cutoff') || lowerMessage.includes('percentile')) {
-      response = `📊 **MHT-CET 2025 Cutoff Information**\n\n🎯 **Top Colleges Cutoffs (General Category)**:\n• COEP Pune: 99.5%+ (Computer Engineering)\n• VJTI Mumbai: 99.3%+ (Computer Engineering)\n• Government College Aurangabad: 97.5%+\n• Walchand Sangli: 96.8%+\n\n📈 **Category-wise Cutoffs**:\n• General: Highest cutoffs\n• OBC: 5-10% lower than General\n• SC/ST: 15-25% lower than General\n• EWS: Similar to General\n\nWhich specific college or branch cutoff would you like to know?`;
+      response = `📊 **MHT-CET 2025 Cutoff Information**\n\n🎯 **Top Colleges Cutoffs (General Category)**:\n• COEP Pune: 99.5%+ (Computer Engineering)\n• VJTI Mumbai: 99.3%+ (Computer Engineering)\n• Government College Aurangabad: 97.5%+\n• Walchand Sangli: 96.8%+\n\n📈 **Category-wise Cutoffs Available**:\n• **General Categories**: General Open, OBC, SC, ST, EWS\n• **Tribal Categories**: VJNT, NT1, NT2, NT3\n• **Special Categories**: SEBC, TFWS\n• **Ladies Categories**: All above categories with ladies quota\n\n💡 **Cutoff Trends**:\n• General: Highest cutoffs\n• OBC: 3-8% lower than General\n• SC/ST: 10-20% lower than General\n• EWS: Similar to General\n• Ladies: Slightly lower than respective categories\n\nWhich specific college or branch cutoff would you like to know?`;
       intent = 'cutoff_inquiry';
     } else if (lowerMessage.includes('fees') || lowerMessage.includes('cost') || lowerMessage.includes('tuition')) {
       response = `💰 **Engineering College Fees in Maharashtra**\n\n🏛️ **Government Colleges**:\n• COEP, VJTI: ₹80,000 - ₹1,00,000/year\n• Other Govt Colleges: ₹60,000 - ₹90,000/year\n\n🏢 **Private Colleges**:\n• Tier 1 Private: ₹2-5 lakhs/year\n• Tier 2 Private: ₹1.5-3 lakhs/year\n• Deemed Universities: ₹5-15 lakhs/year\n\n💡 **Additional Costs**:\n• Hostel: ₹50,000-₹1,50,000/year\n• Books & Materials: ₹20,000-₹30,000/year\n\n🎓 **Scholarships Available**: Merit-based, Need-based, Category-based\n\nWant details about specific college fees or scholarship information?`;
@@ -1571,6 +1619,32 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Seed colleges endpoint (for development)
+app.post('/api/seed-colleges', async (req, res) => {
+  try {
+    console.log('🔄 Starting college seeding via API...');
+    
+    // Import the seeder
+    const { seedColleges } = await import('./seeders/collegeSeeder.js');
+    
+    // Run the seeder
+    const colleges = await seedColleges();
+    
+    res.json({
+      success: true,
+      message: `Successfully seeded ${colleges.length} colleges`,
+      count: colleges.length
+    });
+  } catch (error) {
+    console.error('❌ Seeding error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to seed colleges',
+      error: error.message
+    });
+  }
+});
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({ 
@@ -1580,6 +1654,7 @@ app.use('*', (req, res) => {
       'GET /',
       'GET /health',
       'POST /api/seed',
+      'POST /api/seed-colleges',
       'POST /api/auth/register',
       'POST /api/auth/login',
       'POST /api/auth/logout',

@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 // Function to read and parse the real MHT-CET CSV data
 const parseCSVData = () => {
   try {
-    const csvPath = path.join(__dirname, '../../../maharashtra_cap_round_all_2025.csv');
+    const csvPath = path.join(__dirname, '../../../FINAL_MAHARASHTRA_ALL_CASTWISE_FULL.csv');
     
     // Check if file exists
     if (!fs.existsSync(csvPath)) {
@@ -38,7 +38,7 @@ const parseCSVData = () => {
     let skippedLines = 0;
     
     // Process each line of CSV data (process more lines for production)
-    for (let i = 1; i < Math.min(lines.length, 5000); i++) { // Increased to 5000 lines
+    for (let i = 1; i < Math.min(lines.length, 10000); i++) { // Increased to 10000 lines
       const line = lines[i].trim();
       if (!line) {
         skippedLines++;
@@ -48,7 +48,7 @@ const parseCSVData = () => {
       // Handle CSV parsing with quoted fields
       const values = parseCSVLine(line);
       
-      if (values.length < 10) {
+      if (values.length < 15) {
         skippedLines++;
         continue;
       }
@@ -59,51 +59,89 @@ const parseCSVData = () => {
         const collegeCode = values[2]?.trim();
         const branchName = values[3]?.replace(/"/g, '').trim();
         const branchCode = values[4]?.trim();
+        const round = values[5]?.trim();
+        const year = values[6]?.trim();
+        const seatType = values[7]?.trim();
+        const seatLevel = values[8]?.trim();
+        const location = values[9]?.trim();
+        const collegeType = values[10]?.trim();
         
-        // Parse cutoffs with better error handling - handle empty strings
-        const generalCutoff = values[5] && values[5].trim() !== '' ? parseFloat(values[5]) : null;
-        const obcCutoff = values[6] && values[6].trim() !== '' ? parseFloat(values[6]) : null;
-        const scCutoff = values[7] && values[7].trim() !== '' ? parseFloat(values[7]) : null;
-        const stCutoff = values[8] && values[8].trim() !== '' ? parseFloat(values[8]) : null;
-        const ewsCutoff = values[9] && values[9].trim() !== '' ? parseFloat(values[9]) : null;
-        const vjntCutoff = values[10] && values[10].trim() !== '' ? parseFloat(values[10]) : null;
-        const sbcCutoff = values[11] && values[11].trim() !== '' ? parseFloat(values[11]) : null;
+        // Parse caste-wise cutoffs - new comprehensive format
+        const gopens = values[11] && values[11].trim() !== '' ? parseFloat(values[11]) : null;
+        const gscs = values[12] && values[12].trim() !== '' ? parseFloat(values[12]) : null;
+        const gsts = values[13] && values[13].trim() !== '' ? parseFloat(values[13]) : null;
+        const gvjs = values[14] && values[14].trim() !== '' ? parseFloat(values[14]) : null;
+        const gnt1s = values[15] && values[15].trim() !== '' ? parseFloat(values[15]) : null;
+        const gnt2s = values[16] && values[16].trim() !== '' ? parseFloat(values[16]) : null;
+        const gnt3s = values[17] && values[17].trim() !== '' ? parseFloat(values[17]) : null;
+        const gobcs = values[18] && values[18].trim() !== '' ? parseFloat(values[18]) : null;
+        const gsebcs = values[19] && values[19].trim() !== '' ? parseFloat(values[19]) : null;
+        
+        // Ladies categories
+        const lopens = values[20] && values[20].trim() !== '' ? parseFloat(values[20]) : null;
+        const lscs = values[21] && values[21].trim() !== '' ? parseFloat(values[21]) : null;
+        const lsts = values[22] && values[22].trim() !== '' ? parseFloat(values[22]) : null;
+        const lvjs = values[23] && values[23].trim() !== '' ? parseFloat(values[23]) : null;
+        const lnt1s = values[24] && values[24].trim() !== '' ? parseFloat(values[24]) : null;
+        const lnt2s = values[25] && values[25].trim() !== '' ? parseFloat(values[25]) : null;
+        const lnt3s = values[26] && values[26].trim() !== '' ? parseFloat(values[26]) : null;
+        const lobcs = values[27] && values[27].trim() !== '' ? parseFloat(values[27]) : null;
+        const lsebcs = values[28] && values[28].trim() !== '' ? parseFloat(values[28]) : null;
+        
+        // Special categories
+        const tfws = values[29] && values[29].trim() !== '' ? parseFloat(values[29]) : null;
+        const ews = values[30] && values[30].trim() !== '' ? parseFloat(values[30]) : null;
         
         // Skip if essential data is missing
-        if (!collegeId || !collegeName || !branchName) {
+        if (!collegeName || !branchName || !location) {
           skippedLines++;
           continue;
         }
         
-        const location = extractLocationFromName(collegeName);
-        const collegeType = determineCollegeType(collegeName);
+        const collegeLocation = location || extractLocationFromName(collegeName);
+        const type = determineCollegeType(collegeName, collegeType);
         
-        const collegeKey = collegeName; // Use college name as key instead of ID
+        const collegeKey = collegeName; // Use college name as key
         
         if (!colleges.has(collegeKey)) {
           colleges.set(collegeKey, {
             name: collegeName,
-            location: location + ', Maharashtra',
-            city: location,
+            location: collegeLocation + ', Maharashtra',
+            city: collegeLocation,
             state: 'Maharashtra',
-            type: collegeType,
+            type: type,
             establishedYear: getEstablishedYear(collegeName),
             courses: [],
             cutoff: {
-              general: generalCutoff,
-              obc: obcCutoff,
-              sc: scCutoff,
-              st: stCutoff,
-              ews: ewsCutoff,
-              vjnt: vjntCutoff,
-              sbc: sbcCutoff
+              general: gopens,
+              obc: gobcs,
+              sc: gscs,
+              st: gsts,
+              ews: ews,
+              vjnt: gvjs,
+              nt1: gnt1s,
+              nt2: gnt2s,
+              nt3: gnt3s,
+              sebc: gsebcs,
+              tfws: tfws,
+              ladies: {
+                general: lopens,
+                obc: lobcs,
+                sc: lscs,
+                st: lsts,
+                vjnt: lvjs,
+                nt1: lnt1s,
+                nt2: lnt2s,
+                nt3: lnt3s,
+                sebc: lsebcs
+              }
             },
-            fees: generateFees(collegeType),
+            fees: generateFees(type),
             placements: generatePlacements(collegeName),
             facilities: getStandardFacilities(),
             accreditation: getAccreditation(collegeName),
             ranking: generateRanking(),
-            contact: generateContact(collegeName, location),
+            contact: generateContact(collegeName, collegeLocation),
             featured: isFeaturedCollege(collegeName)
           });
         }
@@ -119,26 +157,45 @@ const parseCSVData = () => {
             duration: '4 years',
             seats: generateSeats(branchName),
             cutoff: {
-              general: generalCutoff,
-              obc: obcCutoff,
-              sc: scCutoff,
-              st: stCutoff,
-              ews: ewsCutoff,
-              vjnt: vjntCutoff,
-              sbc: sbcCutoff
+              general: gopens,
+              obc: gobcs,
+              sc: gscs,
+              st: gsts,
+              ews: ews,
+              vjnt: gvjs,
+              nt1: gnt1s,
+              nt2: gnt2s,
+              nt3: gnt3s,
+              sebc: gsebcs,
+              tfws: tfws,
+              ladies: {
+                general: lopens,
+                obc: lobcs,
+                sc: lscs,
+                st: lsts,
+                vjnt: lvjs,
+                nt1: lnt1s,
+                nt2: lnt2s,
+                nt3: lnt3s,
+                sebc: lsebcs
+              }
             }
           });
         }
         
         // Update college overall cutoff to be the best among all branches
         updateCollegeCutoffs(college, {
-          general: generalCutoff,
-          obc: obcCutoff,
-          sc: scCutoff,
-          st: stCutoff,
-          ews: ewsCutoff,
-          vjnt: vjntCutoff,
-          sbc: sbcCutoff
+          general: gopens,
+          obc: gobcs,
+          sc: gscs,
+          st: gsts,
+          ews: ews,
+          vjnt: gvjs,
+          nt1: gnt1s,
+          nt2: gnt2s,
+          nt3: gnt3s,
+          sebc: gsebcs,
+          tfws: tfws
         });
         
         processedLines++;
@@ -189,14 +246,20 @@ const parseCSVLine = (line) => {
   return values;
 };
 
-// Helper function to determine college type from name
-const determineCollegeType = (name) => {
+// Helper function to determine college type from name and type field
+const determineCollegeType = (name, typeField) => {
   const lowerName = name.toLowerCase();
-  if (lowerName.includes('government') || lowerName.includes('govt')) {
+  const lowerType = (typeField || '').toLowerCase();
+  
+  if (lowerName.includes('government') || lowerName.includes('govt') || lowerType.includes('government')) {
     return 'Government';
-  } else if (lowerName.includes('autonomous')) {
+  } else if (lowerType.includes('autonomous') || lowerName.includes('autonomous')) {
     return 'Autonomous';
-  } else if (lowerName.includes('deemed') || lowerName.includes('university')) {
+  } else if (lowerType.includes('university') || lowerName.includes('university')) {
+    return 'University';
+  } else if (lowerType.includes('aided') || lowerType.includes('un-aided')) {
+    return 'Private';
+  } else if (lowerName.includes('deemed')) {
     return 'Deemed';
   } else {
     return 'Private';
@@ -215,7 +278,14 @@ const updateCollegeCutoffs = (college, newCutoffs) => {
 
 // Helper functions
 const extractLocationFromName = (name) => {
-  const locations = ['Pune', 'Mumbai', 'Nagpur', 'Aurangabad', 'Nashik', 'Kolhapur', 'Amravati', 'Sangli', 'Yavatmal', 'Akola', 'Pusad', 'Shegaon'];
+  const locations = [
+    'Pune', 'Mumbai', 'Nagpur', 'Aurangabad', 'Nashik', 'Kolhapur', 'Amravati', 'Sangli', 
+    'Yavatmal', 'Akola', 'Pusad', 'Shegaon', 'Solapur', 'Nanded', 'Latur', 'Osmanabad',
+    'Jalgaon', 'Dhule', 'Ahmednagar', 'Satara', 'Ratnagiri', 'Sindhudurg', 'Thane',
+    'Raigad', 'Palghar', 'Wardha', 'Chandrapur', 'Gadchiroli', 'Gondia', 'Bhandara',
+    'Buldhana', 'Washim', 'Hingoli', 'Parbhani', 'Jalna', 'Bid', 'Navi Mumbai'
+  ];
+  
   for (const location of locations) {
     if (name.toLowerCase().includes(location.toLowerCase())) {
       return location;
