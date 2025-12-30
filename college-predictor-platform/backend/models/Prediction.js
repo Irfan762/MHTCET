@@ -15,12 +15,23 @@ const predictionSchema = new mongoose.Schema({
     },
     category: {
       type: String,
-      required: true,
-      enum: ['General', 'OBC', 'SC', 'ST', 'EWS']
+      required: true
     },
     course: {
-      type: [String], // Changed to array to support multiple courses
+      type: [String],
       required: true
+    },
+    universityType: {
+      type: String,
+      default: 'Home University'
+    },
+    includeLadies: {
+      type: Boolean,
+      default: false
+    },
+    includeTFWS: {
+      type: Boolean,
+      default: false
     },
     examType: {
       type: String,
@@ -28,7 +39,7 @@ const predictionSchema = new mongoose.Schema({
     },
     examYear: {
       type: Number,
-      default: new Date().getFullYear()
+      default: 2025
     }
   },
   predictions: [{
@@ -37,15 +48,19 @@ const predictionSchema = new mongoose.Schema({
       ref: 'College',
       required: true
     },
+    course: String,
     probability: {
       type: String,
-      enum: ['High', 'Medium', 'Low'],
+      enum: ['High', 'Medium', 'Low', 'Probable', 'Borderline'],
       required: true
     },
+    admissionChance: Number,
+    riskLabel: String,
     cutoffForCategory: {
       type: Number,
       required: true
     },
+    adjustedCutoff: Number,
     difference: {
       type: Number,
       required: true
@@ -54,7 +69,6 @@ const predictionSchema = new mongoose.Schema({
       type: Number,
       required: true
     },
-    course: String,
     fees: String,
     placements: {
       averagePackage: String,
@@ -71,28 +85,14 @@ const predictionSchema = new mongoose.Schema({
       type: Number,
       default: 1
     },
-    highProbability: {
-      type: Number,
-      default: 0
-    },
-    mediumProbability: {
-      type: Number,
-      default: 0
-    },
-    lowProbability: {
-      type: Number,
-      default: 0
-    },
-    courseBreakdown: [{
-      course: String,
-      totalColleges: Number,
-      highProbability: Number,
-      mediumProbability: Number,
-      lowProbability: Number
-    }],
+    highChance: Number,
+    mediumChance: Number,
+    lowChance: Number,
+    averageChance: Number,
+    universityApplied: String,
     algorithmVersion: {
       type: String,
-      default: '1.0'
+      default: '4.0'
     }
   },
   status: {

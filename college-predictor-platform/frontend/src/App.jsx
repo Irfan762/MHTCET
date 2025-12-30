@@ -62,10 +62,10 @@ function App() {
     fetchColleges();
     const savedUser = localStorage.getItem('mhtcet_user');
     const savedToken = localStorage.getItem('mhtcet_token');
-    
+
     console.log('Checking saved user:', savedUser ? 'Found' : 'Not found');
     console.log('Checking saved token:', savedToken ? 'Found' : 'Not found');
-    
+
     if (savedUser && savedToken) {
       try {
         const parsedUser = JSON.parse(savedUser);
@@ -97,7 +97,7 @@ function App() {
   // Load prediction history for the user
   const loadPredictionHistory = async () => {
     if (!user) return;
-    
+
     try {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/predictions/history', {
@@ -119,7 +119,7 @@ function App() {
   // Load chat history for the user
   const loadChatHistory = async () => {
     if (!user) return;
-    
+
     try {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/chat/history', {
@@ -140,7 +140,7 @@ function App() {
   // Load specific chat session
   const loadChatSession = async (sessionId) => {
     if (!user) return;
-    
+
     try {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch(`http://127.0.0.1:3001/api/chat/history/${sessionId}`, {
@@ -185,7 +185,10 @@ function App() {
     setFormData({
       percentile: historyItem.inputData.percentile.toString(),
       category: historyItem.inputData.category,
-      courses: historyItem.inputData.courses
+      courses: historyItem.inputData.course || historyItem.inputData.courses || [],
+      universityType: historyItem.inputData.universityType || 'Home University',
+      includeLadies: historyItem.inputData.includeLadies || false,
+      includeTFWS: historyItem.inputData.includeTFWS || false
     });
     setShowHistoryView(false);
     addNotification('📊 Prediction loaded from history', 'success');
@@ -330,7 +333,7 @@ function App() {
   // Handler functions
   const handlePrediction = async (e) => {
     e.preventDefault();
-    
+
     // Temporary bypass for testing - remove this later
     if (!user) {
       const tempUser = { id: 'temp', name: 'Test User', email: 'test@test.com' };
@@ -338,13 +341,13 @@ function App() {
       localStorage.setItem('mhtcet_user', JSON.stringify(tempUser));
       localStorage.setItem('mhtcet_token', 'temp-token');
     }
-    
+
     setLoading(true);
     try {
       const token = localStorage.getItem('mhtcet_token') || 'temp-token';
       const response = await fetch('http://127.0.0.1:3001/api/predictions', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -372,53 +375,53 @@ function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     // Client-side validation
     if (authMode === 'register' && (!authData.name || authData.name.trim().length < 2)) {
       addNotification('Please enter a valid name (at least 2 characters)', 'error');
       setLoading(false);
       return;
     }
-    
+
     if (!authData.email || !authData.email.includes('@')) {
       addNotification('Please enter a valid email address', 'error');
       setLoading(false);
       return;
     }
-    
+
     if (!authData.password || authData.password.length < 6) {
       addNotification('Password must be at least 6 characters long', 'error');
       setLoading(false);
       return;
     }
-    
+
     // Clear any previous errors
     console.log('Starting authentication process...');
     console.log('Auth mode:', authMode);
     console.log('Auth data:', { ...authData, password: '[HIDDEN]' });
-    
+
     try {
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
       const url = `http://127.0.0.1:3001${endpoint}`;
-      
+
       console.log('Making request to:', url);
-      
+
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
         credentials: 'include', // Include cookies
         body: JSON.stringify(authData),
       });
-      
+
       console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
+
       const data = await response.json();
       console.log('Response data:', data);
-      
+
       if (data.success) {
         console.log('Authentication successful!');
         setUser(data.user);
@@ -459,7 +462,7 @@ function App() {
   const handleChatSubmit = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    
+
     // If user is not logged in, show auth modal
     if (!user) {
       setShowAuthModal(true);
@@ -477,17 +480,17 @@ function App() {
     const currentInput = chatInput;
     setChatInput('');
     setChatLoading(true);
-    
+
     try {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/chat', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         credentials: 'include',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: currentInput,
           sessionId: chatSessionId,
           context: {
@@ -503,7 +506,7 @@ function App() {
       if (data.success) {
         const botResponse = { id: Date.now() + 1, type: 'bot', message: data.response, timestamp: new Date() };
         setChatMessages(prev => [...prev, botResponse]);
-        
+
         // Refresh chat history after new message
         loadChatHistory();
       } else {
@@ -523,18 +526,18 @@ function App() {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token || 'temp-token'}`
         },
         credentials: 'include',
-        body: JSON.stringify({ 
-          predictions: [college], 
-          studentInfo: { 
-            ...formData, 
+        body: JSON.stringify({
+          predictions: [college],
+          studentInfo: {
+            ...formData,
             name: user?.name || 'Guest User',
             course: college.course
-          } 
+          }
         }),
       });
 
@@ -550,7 +553,7 @@ function App() {
       // Handle PDF response with explicit MIME type
       const arrayBuffer = await response.arrayBuffer();
       const pdfBlob = new Blob([arrayBuffer], { type: 'application/pdf' });
-      
+
       console.log('PDF blob size:', pdfBlob.size);
       console.log('PDF blob type:', pdfBlob.type);
 
@@ -579,18 +582,18 @@ function App() {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token || 'temp-token'}`
         },
         credentials: 'include',
-        body: JSON.stringify({ 
-          predictions: predictions, 
-          studentInfo: { 
-            ...formData, 
+        body: JSON.stringify({
+          predictions: predictions,
+          studentInfo: {
+            ...formData,
             name: user?.name || 'Guest User',
             courses: formData.courses
-          } 
+          }
         }),
       });
 
@@ -620,7 +623,7 @@ function App() {
     setShowCollegeModal(true);
   };
 
-  const filteredColleges = colleges.filter(college => 
+  const filteredColleges = colleges.filter(college =>
     college.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     college.location.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -635,9 +638,9 @@ function App() {
   ];
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: '100vh', 
+    <div style={{
+      display: 'flex',
+      height: '100vh',
       background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
       fontFamily: 'var(--font-sans)',
       position: 'relative',
@@ -670,15 +673,15 @@ function App() {
       }}>
         {notifications.map((notification) => (
           <div key={notification.id} className={`notification-pro notification-${notification.type} animate-slide-in-pro`}>
-            <div style={{ 
+            <div style={{
               fontSize: '1.25rem',
-              color: notification.type === 'success' ? 'var(--success-600)' : 
-                     notification.type === 'error' ? 'var(--error-500)' : 
-                     notification.type === 'warning' ? 'var(--warning-500)' : 'var(--primary-600)'
+              color: notification.type === 'success' ? 'var(--success-600)' :
+                notification.type === 'error' ? 'var(--error-500)' :
+                  notification.type === 'warning' ? 'var(--warning-500)' : 'var(--primary-600)'
             }}>
-              {notification.type === 'success' ? '✅' : 
-               notification.type === 'error' ? '❌' : 
-               notification.type === 'warning' ? '⚠️' : 'ℹ️'}
+              {notification.type === 'success' ? '✅' :
+                notification.type === 'error' ? '❌' :
+                  notification.type === 'warning' ? '⚠️' : 'ℹ️'}
             </div>
             <div>
               <div className="font-semibold text-sm text-gray-800">
@@ -697,12 +700,12 @@ function App() {
         width: sidebarOpen ? '340px' : '80px',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         display: 'flex', flexDirection: 'column',
-        margin: 'var(--space-4)', 
+        margin: 'var(--space-4)',
         boxShadow: 'var(--shadow-2xl)'
       }}>
         {/* Sidebar Header */}
         <div style={{
-          padding: 'var(--space-8) var(--space-6)', 
+          padding: 'var(--space-8) var(--space-6)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
@@ -716,8 +719,8 @@ function App() {
               </p>
             </div>
           )}
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)} 
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
             className="btn-secondary-pro"
             style={{ padding: 'var(--space-3)', fontSize: '1.125rem' }}
           >
@@ -728,26 +731,26 @@ function App() {
         {/* Navigation Items */}
         <nav style={{ flex: 1, padding: 'var(--space-6) 0' }}>
           {sidebarItems.map((item, index) => (
-            <button 
-              key={item.id} 
-              onClick={() => setActiveTab(item.id)} 
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
               className="animate-slide-in-pro"
               style={{
-                width: '100%', 
-                padding: 'var(--space-4) var(--space-6)', 
-                textAlign: 'left', 
+                width: '100%',
+                padding: 'var(--space-4) var(--space-6)',
+                textAlign: 'left',
                 cursor: 'pointer',
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 'var(--space-4)', 
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-4)',
                 fontSize: '0.875rem',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', 
-                border: 'none', 
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: 'none',
                 margin: 'var(--space-1) var(--space-4)',
-                borderRadius: 'var(--radius-xl)', 
+                borderRadius: 'var(--radius-xl)',
                 fontWeight: '600',
-                background: activeTab === item.id ? 
-                  'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' : 
+                background: activeTab === item.id ?
+                  'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' :
                   'transparent',
                 color: activeTab === item.id ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
                 animationDelay: `${index * 0.05}s`,
@@ -766,29 +769,29 @@ function App() {
         </nav>
 
         {/* Professional User Section */}
-        <div style={{ 
-          padding: 'var(--space-6)', 
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)' 
+        <div style={{
+          padding: 'var(--space-6)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)'
         }}>
           {user ? (
             <div className="animate-scale-pro">
               {sidebarOpen && (
-                <div style={{ 
-                  marginBottom: 'var(--space-4)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 'var(--space-4)' 
+                <div style={{
+                  marginBottom: 'var(--space-4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-4)'
                 }}>
                   <div style={{
-                    width: '44px', 
-                    height: '44px', 
+                    width: '44px',
+                    height: '44px',
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, var(--primary-400) 0%, var(--primary-600) 100%)',
-                    display: 'flex', 
-                    alignItems: 'center', 
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#ffffff', 
-                    fontWeight: '700', 
+                    color: '#ffffff',
+                    fontWeight: '700',
                     fontSize: '1.125rem',
                     boxShadow: 'var(--shadow-lg)'
                   }}>
@@ -804,8 +807,8 @@ function App() {
                   </div>
                 </div>
               )}
-              <button 
-                onClick={handleLogout} 
+              <button
+                onClick={handleLogout}
                 className="btn-secondary-pro"
                 style={{ width: '100%', fontSize: '0.875rem' }}
               >
@@ -813,8 +816,8 @@ function App() {
               </button>
             </div>
           ) : (
-            <button 
-              onClick={() => setShowAuthModal(true)} 
+            <button
+              onClick={() => setShowAuthModal(true)}
               className="btn-primary-pro"
               style={{ width: '100%', fontSize: '0.875rem' }}
             >
@@ -825,18 +828,18 @@ function App() {
       </div>
 
       {/* Main Content Area */}
-      <div style={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
         overflow: 'hidden',
         margin: 'var(--space-4) var(--space-4) var(--space-4) 0'
       }}>
         {/* Professional Header */}
         <header className="glass-card-white-pro animate-slide-in-pro" style={{
-          padding: 'var(--space-6) var(--space-8)', 
-          display: 'flex', 
-          alignItems: 'center', 
+          padding: 'var(--space-6) var(--space-8)',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 'var(--space-4)'
         }}>
@@ -862,8 +865,8 @@ function App() {
 
         {/* Professional Content Area */}
         <main className="glass-card-white-pro animate-slide-in-pro" style={{
-          flex: 1, 
-          padding: 'var(--space-8)', 
+          flex: 1,
+          padding: 'var(--space-8)',
           overflow: 'auto'
         }}>
           {/* Professional Dashboard */}
@@ -880,37 +883,37 @@ function App() {
 
               <div className="grid-pro grid-auto-fit mb-12">
                 {[
-                  { 
-                    icon: '🎯', 
-                    title: 'AI-Powered Predictions', 
-                    desc: 'Get accurate college predictions using advanced ML algorithms and historical data analysis', 
+                  {
+                    icon: '🎯',
+                    title: 'AI-Powered Predictions',
+                    desc: 'Get accurate college predictions using advanced ML algorithms and historical data analysis',
                     gradient: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
-                    delay: '0s' 
+                    delay: '0s'
                   },
-                  { 
-                    icon: '🏛️', 
-                    title: 'Premium College Database', 
-                    desc: 'Comprehensive information about Maharashtra\'s top engineering institutions with real-time updates', 
+                  {
+                    icon: '🏛️',
+                    title: 'Premium College Database',
+                    desc: 'Comprehensive information about Maharashtra\'s top engineering institutions with real-time updates',
                     gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                    delay: '0.1s' 
+                    delay: '0.1s'
                   },
-                  { 
-                    icon: '🤖', 
-                    title: 'Smart AI Assistant', 
-                    desc: 'Get instant answers to your admission queries with our intelligent ChatGPT-style assistant', 
+                  {
+                    icon: '🤖',
+                    title: 'Smart AI Assistant',
+                    desc: 'Get instant answers to your admission queries with our intelligent ChatGPT-style assistant',
                     gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                    delay: '0.2s' 
+                    delay: '0.2s'
                   },
-                  { 
-                    icon: '📊', 
-                    title: 'Advanced Analytics', 
-                    desc: 'Detailed placement statistics and career outcome data for informed decision making', 
+                  {
+                    icon: '📊',
+                    title: 'Advanced Analytics',
+                    desc: 'Detailed placement statistics and career outcome data for informed decision making',
                     gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-                    delay: '0.3s' 
+                    delay: '0.3s'
                   }
                 ].map((feature, index) => (
-                  <div 
-                    key={index} 
+                  <div
+                    key={index}
                     className="card-pro animate-slide-in-pro"
                     style={{
                       background: feature.gradient,
@@ -950,8 +953,8 @@ function App() {
                       { value: '50+', label: 'Courses Available', color: '#f093fb', icon: '📚' },
                       { value: '₹45L', label: 'Highest Package', color: '#4facfe', icon: '💰' }
                     ].map((stat, index) => (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="card-pro animate-scale-pro"
                         style={{
                           textAlign: 'center',
@@ -997,7 +1000,7 @@ function App() {
                       📝 Enter Your Details
                     </h4>
                   </div>
-                  
+
                   <div className="card-body-pro">
                     <form onSubmit={handlePrediction} className="grid-pro" style={{ gap: 'var(--space-6)' }}>
                       <div>
@@ -1011,7 +1014,7 @@ function App() {
                           step="0.01"
                           placeholder="Enter your percentile (0-100)"
                           value={formData.percentile}
-                          onChange={(e) => setFormData({...formData, percentile: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, percentile: e.target.value })}
                           className="input-pro focus-ring-pro"
                           required
                         />
@@ -1023,7 +1026,7 @@ function App() {
                         </label>
                         <select
                           value={formData.category}
-                          onChange={(e) => setFormData({...formData, category: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                           className="input-pro focus-ring-pro"
                         >
                           <option value="General">General Open (GOPENS)</option>
@@ -1055,7 +1058,7 @@ function App() {
                         </label>
                         <select
                           value={formData.universityType || 'Home University'}
-                          onChange={(e) => setFormData({...formData, universityType: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, universityType: e.target.value })}
                           className="input-pro focus-ring-pro"
                         >
                           <option value="Home University">Home University</option>
@@ -1075,7 +1078,7 @@ function App() {
                             <input
                               type="checkbox"
                               checked={formData.includeLadies || false}
-                              onChange={(e) => setFormData({...formData, includeLadies: e.target.checked})}
+                              onChange={(e) => setFormData({ ...formData, includeLadies: e.target.checked })}
                               className="w-4 h-4 text-pink-600 bg-gray-100 border-gray-300 rounded focus:ring-pink-500"
                             />
                             <span className="text-sm font-medium text-gray-700">
@@ -1086,7 +1089,7 @@ function App() {
                             <input
                               type="checkbox"
                               checked={formData.includeTFWS || false}
-                              onChange={(e) => setFormData({...formData, includeTFWS: e.target.checked})}
+                              onChange={(e) => setFormData({ ...formData, includeTFWS: e.target.checked })}
                               className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500"
                             />
                             <span className="text-sm font-medium text-gray-700">
@@ -1106,7 +1109,7 @@ function App() {
                         <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
                           {[
                             'Computer Engineering',
-                            'Information Technology', 
+                            'Information Technology',
                             'Electronics & Telecommunication',
                             'Mechanical Engineering',
                             'Civil Engineering',
@@ -1125,12 +1128,12 @@ function App() {
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setFormData({
-                                      ...formData, 
+                                      ...formData,
                                       courses: [...formData.courses, course]
                                     });
                                   } else {
                                     setFormData({
-                                      ...formData, 
+                                      ...formData,
                                       courses: formData.courses.filter(c => c !== course)
                                     });
                                   }
@@ -1151,7 +1154,7 @@ function App() {
                                   <button
                                     type="button"
                                     onClick={() => setFormData({
-                                      ...formData, 
+                                      ...formData,
                                       courses: formData.courses.filter(c => c !== course)
                                     })}
                                     className="ml-1 text-blue-600 hover:text-blue-800"
@@ -1170,16 +1173,16 @@ function App() {
                         disabled={loading || formData.courses.length === 0}
                         className={`btn-primary-pro focus-ring-pro ${(loading || formData.courses.length === 0) ? 'opacity-50' : ''}`}
                         style={{
-                          width: '100%', 
-                          padding: 'var(--space-5)', 
-                          fontSize: '1.125rem', 
+                          width: '100%',
+                          padding: 'var(--space-5)',
+                          fontSize: '1.125rem',
                           fontWeight: '700',
                           marginTop: 'var(--space-4)'
                         }}
                       >
-                        {loading ? '⏳ Generating Predictions...' : 
-                         formData.courses.length === 0 ? '⚠️ Select at least one course' :
-                         `🚀 Get Predictions for ${formData.courses.length} Course${formData.courses.length !== 1 ? 's' : ''}`}
+                        {loading ? '⏳ Generating Predictions...' :
+                          formData.courses.length === 0 ? '⚠️ Select at least one course' :
+                            `🚀 Get Predictions for ${formData.courses.length} Course${formData.courses.length !== 1 ? 's' : ''}`}
                       </button>
                     </form>
                   </div>
@@ -1187,8 +1190,8 @@ function App() {
 
                 {/* Professional Info Panel */}
                 <div className="animate-slide-in-pro" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-                  <div className="card-pro" style={{ 
-                    background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)', 
+                  <div className="card-pro" style={{
+                    background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
                     color: '#ffffff',
                     border: 'none'
                   }}>
@@ -1205,8 +1208,8 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="card-pro" style={{ 
-                    background: 'linear-gradient(135deg, var(--success-500) 0%, #38f9d7 100%)', 
+                  <div className="card-pro" style={{
+                    background: 'linear-gradient(135deg, var(--success-500) 0%, #38f9d7 100%)',
                     color: '#ffffff',
                     border: 'none'
                   }}>
@@ -1224,8 +1227,8 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="card-pro" style={{ 
-                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+                  <div className="card-pro" style={{
+                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
                     color: '#ffffff',
                     border: 'none'
                   }}>
@@ -1298,7 +1301,7 @@ function App() {
                         </span>
                       )}
                     </div>
-                    
+
                     <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 1rem 0' }}>
                       📍 {college.location}
                     </p>
@@ -1385,7 +1388,7 @@ function App() {
                 </div>
                 <div className="card-body-pro">
                   <div style={{ display: 'flex', gap: 'var(--space-4)', alignItems: 'center', marginBottom: 'var(--space-6)' }}>
-                    <select 
+                    <select
                       className="input-pro focus-ring-pro"
                       style={{ flex: 1 }}
                       onChange={(e) => {
@@ -1398,7 +1401,7 @@ function App() {
                         <option key={index} value={college.name}>{college.name}</option>
                       ))}
                     </select>
-                    <button 
+                    <button
                       className="btn-primary-pro"
                       onClick={() => setSelectedCollege(null)}
                     >
@@ -1409,7 +1412,7 @@ function App() {
                   {selectedCollege ? (
                     /* College-specific Placement Data */
                     <div className="animate-scale-pro">
-                      <div className="card-pro mb-6" style={{ 
+                      <div className="card-pro mb-6" style={{
                         background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
                         color: 'white',
                         border: 'none'
@@ -1483,20 +1486,18 @@ function App() {
                             ].map((company, index) => (
                               <div key={index} className="card-pro animate-slide-in-pro" style={{
                                 animationDelay: `${index * 0.05}s`,
-                                border: `2px solid ${
-                                  company.type === 'Product' ? 'var(--success-200)' :
+                                border: `2px solid ${company.type === 'Product' ? 'var(--success-200)' :
                                   company.type === 'Service' ? 'var(--primary-200)' :
-                                  company.type === 'Consulting' ? 'var(--warning-200)' : 'var(--error-200)'
-                                }`
+                                    company.type === 'Consulting' ? 'var(--warning-200)' : 'var(--error-200)'
+                                  }`
                               }}>
                                 <div className="card-body-pro">
                                   <div className="flex justify-between items-start mb-2">
                                     <h6 className="font-bold text-gray-800">{company.name}</h6>
-                                    <span className={`badge-${
-                                      company.type === 'Product' ? 'success' :
+                                    <span className={`badge-${company.type === 'Product' ? 'success' :
                                       company.type === 'Service' ? 'primary' :
-                                      company.type === 'Consulting' ? 'warning' : 'primary'
-                                    }`}>
+                                        company.type === 'Consulting' ? 'warning' : 'primary'
+                                      }`}>
                                       {company.type}
                                     </span>
                                   </div>
@@ -1521,59 +1522,59 @@ function App() {
                         <div className="card-body-pro">
                           <div className="grid-pro grid-auto-fit">
                             {[
-                              { 
-                                branch: 'Computer Engineering', 
-                                students: 120, 
-                                placed: 118, 
-                                avg: '₹14 LPA', 
-                                highest: '₹45 LPA', 
+                              {
+                                branch: 'Computer Engineering',
+                                students: 120,
+                                placed: 118,
+                                avg: '₹14 LPA',
+                                highest: '₹45 LPA',
                                 companies: ['Microsoft', 'Google', 'Amazon', 'TCS'],
-                                color: 'var(--primary-500)' 
+                                color: 'var(--primary-500)'
                               },
-                              { 
-                                branch: 'Information Technology', 
-                                students: 90, 
-                                placed: 87, 
-                                avg: '₹13 LPA', 
-                                highest: '₹42 LPA', 
+                              {
+                                branch: 'Information Technology',
+                                students: 90,
+                                placed: 87,
+                                avg: '₹13 LPA',
+                                highest: '₹42 LPA',
                                 companies: ['Google', 'Amazon', 'Infosys', 'Wipro'],
-                                color: 'var(--success-500)' 
+                                color: 'var(--success-500)'
                               },
-                              { 
-                                branch: 'Electronics & Telecom', 
-                                students: 80, 
-                                placed: 74, 
-                                avg: '₹9 LPA', 
-                                highest: '₹35 LPA', 
+                              {
+                                branch: 'Electronics & Telecom',
+                                students: 80,
+                                placed: 74,
+                                avg: '₹9 LPA',
+                                highest: '₹35 LPA',
                                 companies: ['Qualcomm', 'Intel', 'TCS', 'L&T'],
-                                color: '#f093fb' 
+                                color: '#f093fb'
                               },
-                              { 
-                                branch: 'Mechanical Engineering', 
-                                students: 100, 
-                                placed: 88, 
-                                avg: '₹8 LPA', 
-                                highest: '₹28 LPA', 
+                              {
+                                branch: 'Mechanical Engineering',
+                                students: 100,
+                                placed: 88,
+                                avg: '₹8 LPA',
+                                highest: '₹28 LPA',
                                 companies: ['L&T', 'Bajaj Auto', 'Mahindra', 'Tata Motors'],
-                                color: '#4facfe' 
+                                color: '#4facfe'
                               },
-                              { 
-                                branch: 'Civil Engineering', 
-                                students: 85, 
-                                placed: 72, 
-                                avg: '₹7 LPA', 
-                                highest: '₹22 LPA', 
+                              {
+                                branch: 'Civil Engineering',
+                                students: 85,
+                                placed: 72,
+                                avg: '₹7 LPA',
+                                highest: '₹22 LPA',
                                 companies: ['L&T', 'Shapoorji Pallonji', 'Godrej', 'Tata Projects'],
-                                color: '#fbbf24' 
+                                color: '#fbbf24'
                               },
-                              { 
-                                branch: 'Electrical Engineering', 
-                                students: 75, 
-                                placed: 68, 
-                                avg: '₹8.5 LPA', 
-                                highest: '₹30 LPA', 
+                              {
+                                branch: 'Electrical Engineering',
+                                students: 75,
+                                placed: 68,
+                                avg: '₹8.5 LPA',
+                                highest: '₹30 LPA',
                                 companies: ['Siemens', 'ABB', 'L&T', 'Schneider Electric'],
-                                color: '#ef4444' 
+                                color: '#ef4444'
                               }
                             ].map((branch, index) => (
                               <div key={index} className="card-pro animate-slide-in-pro" style={{
@@ -1585,7 +1586,7 @@ function App() {
                                   <h6 className="font-bold mb-3" style={{ color: branch.color }}>
                                     {branch.branch}
                                   </h6>
-                                  
+
                                   <div className="grid-pro grid-cols-2 mb-4" style={{ gap: 'var(--space-3)' }}>
                                     <div className="text-center">
                                       <div className="text-lg font-black text-gray-800">{branch.placed}/{branch.students}</div>
@@ -1810,8 +1811,8 @@ function App() {
                                   }
                                 }}
                                 className="btn-secondary-pro"
-                                style={{ 
-                                  fontSize: '0.875rem', 
+                                style={{
+                                  fontSize: '0.875rem',
                                   padding: 'var(--space-2) var(--space-4)',
                                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                                   color: 'white',
@@ -1823,7 +1824,7 @@ function App() {
                               </button>
                             </div>
                           </div>
-                          
+
                           <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
@@ -1838,7 +1839,7 @@ function App() {
                               <div className="text-xs text-gray-500">Total Colleges</div>
                             </div>
                           </div>
-                          
+
                           <div style={{ marginBottom: 'var(--space-3)' }}>
                             <div className="text-sm font-semibold text-gray-700 mb-1">Category: {historyItem.inputData.category}</div>
                             <div className="text-sm text-gray-600">
@@ -1849,16 +1850,16 @@ function App() {
                       </div>
                     ))}
                   </div>
-                  
+
                   <div style={{ textAlign: 'center', marginTop: 'var(--space-8)', display: 'flex', gap: 'var(--space-4)', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => setActiveTab('predictor')} className="btn-modern animate-pulse-glow">
                       🎯 Generate New Prediction
                     </button>
                     {predictionHistory.length > 0 && (
-                      <button 
+                      <button
                         onClick={deleteAllPredictions}
                         className="btn-secondary-pro"
-                        style={{ 
+                        style={{
                           background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                           color: 'white',
                           border: 'none',
@@ -1876,17 +1877,16 @@ function App() {
                     <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
                       📊 Your Prediction Results
                     </h3>
-                    <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
+                    <p className="text-gray-600 font-medium text-lg m-0">
                       Based on your MHT-CET performance analysis
                     </p>
-                  hw
                     {/* History Toggle Button */}
                     {predictionHistory.length > 0 && (
                       <div style={{ position: 'absolute', top: 0, right: 0 }}>
                         <button
                           onClick={() => setShowHistoryView(!showHistoryView)}
                           className="btn-secondary-pro"
-                          style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)' ,color: 'black' }}
+                          style={{ fontSize: '0.875rem', padding: 'var(--space-2) var(--space-4)', color: 'black' }}
                         >
                           {showHistoryView ? '📊 Current Results' : '📚 View History'}
                         </button>
@@ -1932,8 +1932,8 @@ function App() {
                                       }
                                     }}
                                     className="btn-secondary-pro"
-                                    style={{ 
-                                      fontSize: '0.875rem', 
+                                    style={{
+                                      fontSize: '0.875rem',
                                       padding: 'var(--space-2) var(--space-4)',
                                       background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                                       color: 'white',
@@ -1945,7 +1945,7 @@ function App() {
                                   </button>
                                 </div>
                               </div>
-                              
+
                               <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
                                 <div className="text-center">
                                   <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
@@ -1960,7 +1960,7 @@ function App() {
                                   <div className="text-xs text-gray-500">Total Colleges</div>
                                 </div>
                               </div>
-                              
+
                               <div style={{ marginBottom: 'var(--space-3)' }}>
                                 <div className="text-sm font-semibold text-gray-700 mb-1">Category: {historyItem.inputData.category}</div>
                                 <div className="text-sm text-gray-600">
@@ -1975,203 +1975,188 @@ function App() {
                   ) : (
                     /* Current Results View */
                     <div>
-                  {/* Results Summary */}
-                  <div className="glass-card animate-slide-top" style={{ padding: '2rem', marginBottom: '2rem', borderRadius: '20px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ color: '#667eea', fontSize: '0.875rem', fontWeight: '600' }}>YOUR PERCENTILE</div>
-                        <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{formData.percentile}%</div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600' }}>HIGH PROBABILITY</div>
-                        <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>
-                          {predictions.filter(p => p.probability === 'High').length}
+                      {/* Results Summary */}
+                      <div className="glass-card animate-slide-top" style={{ padding: '2rem', marginBottom: '2rem', borderRadius: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#667eea', fontSize: '0.875rem', fontWeight: '600' }}>YOUR PERCENTILE</div>
+                            <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{formData.percentile}%</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600' }}>ADMISSION CHANCE</div>
+                            <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>
+                              {Math.round(predictions.reduce((sum, p) => sum + p.admissionChance, 0) / (predictions.length || 1))}%
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: '600' }}>SAFE COLLEGES</div>
+                            <div style={{ color: '#10b981', fontSize: '2rem', fontWeight: '900' }}>
+                              {predictions.filter(p => p.admissionChance >= 85).length}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: '600' }}>TOTAL COLLEGES</div>
+                            <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{predictions.length}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: '600' }}>MEDIUM PROBABILITY</div>
-                        <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>
-                          {predictions.filter(p => p.probability === 'Medium').length}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: '600' }}>TOTAL COLLEGES</div>
-                        <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{predictions.length}</div>
-                      </div>
-                    </div>
-                    
-                    {/* Course-wise Breakdown */}
-                    {formData.courses && formData.courses.length > 1 && (
-                      <div>
-                        <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem', textAlign: 'center' }}>
-                          📚 Course-wise Breakdown
-                        </h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-                          {formData.courses.map((course, index) => {
-                            const coursePredictions = predictions.filter(p => p.course === course);
-                            return (
-                              <div key={course} className="glass-card" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
-                                <div style={{ color: '#374151', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                                  {course}
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '0.75rem' }}>
-                                  <div>
-                                    <div style={{ color: '#10b981', fontWeight: '700' }}>
-                                      {coursePredictions.filter(p => p.probability === 'High').length}
-                                    </div>
-                                    <div style={{ color: '#64748b' }}>High</div>
-                                  </div>
-                                  <div>
-                                    <div style={{ color: '#f59e0b', fontWeight: '700' }}>
-                                      {coursePredictions.filter(p => p.probability === 'Medium').length}
-                                    </div>
-                                    <div style={{ color: '#64748b' }}>Medium</div>
-                                  </div>
-                                  <div>
-                                    <div style={{ color: '#ef4444', fontWeight: '700' }}>
-                                      {coursePredictions.filter(p => p.probability === 'Low').length}
-                                    </div>
-                                    <div style={{ color: '#64748b' }}>Low</div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Course Filter */}
-                  {formData.courses && formData.courses.length > 1 && (
-                    <div className="glass-card animate-slide-top" style={{ padding: '1.5rem', marginBottom: '2rem', borderRadius: '20px' }}>
-                      <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>
-                        🔍 Filter by Course
-                      </h4>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <button
-                          onClick={() => setSelectedCourseFilter('all')}
-                          className={`btn-${selectedCourseFilter === 'all' ? 'primary' : 'secondary'}-pro`}
-                          style={{ padding: '0.5rem 1rem', fontSize: '0.875rem',color:'black' }}
-                        >
-                          All Courses ({predictions.length})
-                        </button>
-                        {formData.courses.map((course) => {
-                          const courseCount = predictions.filter(p => p.course === course).length;
-                          return (
-                            <button
-                              key={course}
-                              onClick={() => setSelectedCourseFilter(course)}
-                              className={`btn-${selectedCourseFilter === course ? 'primary' : 'secondary'}-pro`}
-                              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color:'black' }}
-                            >
-                              {course} ({courseCount})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Download All PDF Button */}
-                  <div className="glass-card animate-slide-top" style={{ padding: '1.5rem', marginBottom: '2rem', borderRadius: '20px', textAlign: 'center' }}>
-                    <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>
-                      📄 Download Complete Report
-                    </h4>
-                    <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                      Get a comprehensive PDF report with all {predictions.length} college predictions
-                    </p>
-                    <button 
-                      onClick={downloadAllPredictionsPDF}
-                      className="btn-modern animate-pulse-glow"
-                      style={{ 
-                        padding: '1rem 2rem', 
-                        fontSize: '1rem',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '12px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      📄 Download Complete PDF Report
-                    </button>
-                  </div>
-
-                  {/* Predictions List */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {predictions
-                      .filter(prediction => selectedCourseFilter === 'all' || prediction.course === selectedCourseFilter)
-                      .slice(0, 20)
-                      .map((prediction, index) => (
-                      <div key={index} className={`glass-card card-hover-lift animate-slide-bottom ${prediction.probability.toLowerCase()}`} style={{
-                        padding: '1.5rem', borderRadius: '15px', animationDelay: `${index * 0.1}s`,
-                        borderLeft: `5px solid ${
-                          prediction.probability === 'High' ? '#10b981' : 
-                          prediction.probability === 'Medium' ? '#f59e0b' : '#ef4444'
-                        }`
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                          <div style={{ flex: 1 }}>
-                            <h4 style={{ fontSize: '1.25rem', fontWeight: '700', margin: '0 0 0.5rem 0', color: '#1f2937' }}>
-                              {prediction.name}
+                        {/* Course-wise Breakdown */}
+                        {formData.courses && formData.courses.length > 1 && (
+                          <div>
+                            <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem', textAlign: 'center' }}>
+                              📚 Course-wise Breakdown
                             </h4>
-                            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>
-                              📍 {prediction.location} • 🎓 {prediction.course}
-                            </p>
-                          </div>
-                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <span style={{
-                              background: prediction.probability === 'High' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                         prediction.probability === 'Medium' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
-                                         'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                              color: '#ffffff', padding: '0.5rem 1rem', borderRadius: '20px',
-                              fontSize: '0.875rem', fontWeight: '700'
-                            }}>
-                              {prediction.probability} Chance
-                            </span>
-                            <button onClick={() => downloadPDF(prediction)} className="btn-modern" style={{
-                              padding: '0.5rem 1rem', fontSize: '0.875rem'
-                            }}>
-                              📄 Download
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-                          <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px', textAlign: 'center' }}>
-                            <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '600' }}>CUTOFF</div>
-                            <div style={{ color: '#1f2937', fontSize: '1.1rem', fontWeight: '700' }}>
-                              {prediction.cutoffForCategory}%
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+                              {formData.courses.map((course, index) => {
+                                const coursePredictions = predictions.filter(p => p.course === course);
+                                return (
+                                  <div key={course} className="glass-card" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                                    <div style={{ color: '#374151', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                                      {course}
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '0.75rem' }}>
+                                      <div>
+                                        <div style={{ color: '#10b981', fontWeight: '700' }}>
+                                          {coursePredictions.filter(p => p.probability === 'High').length}
+                                        </div>
+                                        <div style={{ color: '#64748b' }}>High</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ color: '#f59e0b', fontWeight: '700' }}>
+                                          {coursePredictions.filter(p => p.probability === 'Medium').length}
+                                        </div>
+                                        <div style={{ color: '#64748b' }}>Medium</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ color: '#ef4444', fontWeight: '700' }}>
+                                          {coursePredictions.filter(p => p.probability === 'Low').length}
+                                        </div>
+                                        <div style={{ color: '#64748b' }}>Low</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                          <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px', textAlign: 'center' }}>
-                            <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '600' }}>DIFFERENCE</div>
-                            <div style={{ 
-                              color: prediction.difference >= 0 ? '#10b981' : '#ef4444', 
-                              fontSize: '1.1rem', fontWeight: '700' 
-                            }}>
-                              {prediction.difference > 0 ? '+' : ''}{prediction.difference}%
-                            </div>
-                          </div>
-                          <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px', textAlign: 'center' }}>
-                            <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '600' }}>FEES</div>
-                            <div style={{ color: '#1f2937', fontSize: '1.1rem', fontWeight: '700' }}>
-                              {prediction.fees}
-                            </div>
-                          </div>
-                          <div className="glass-card" style={{ padding: '1rem', borderRadius: '10px', textAlign: 'center' }}>
-                            <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '600' }}>AVG PACKAGE</div>
-                            <div style={{ color: '#1f2937', fontSize: '1.1rem', fontWeight: '700' }}>
-                              {prediction.placements?.averagePackage}
-                            </div>
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+
+                      {/* Course Filter */}
+                      {formData.courses && formData.courses.length > 1 && (
+                        <div className="glass-card animate-slide-top" style={{ padding: '1.5rem', marginBottom: '2rem', borderRadius: '20px' }}>
+                          <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>
+                            🔍 Filter by Course
+                          </h4>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <button
+                              onClick={() => setSelectedCourseFilter('all')}
+                              className={`btn-${selectedCourseFilter === 'all' ? 'primary' : 'secondary'}-pro`}
+                              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'black' }}
+                            >
+                              All Courses ({predictions.length})
+                            </button>
+                            {formData.courses.map((course) => {
+                              const courseCount = predictions.filter(p => p.course === course).length;
+                              return (
+                                <button
+                                  key={course}
+                                  onClick={() => setSelectedCourseFilter(course)}
+                                  className={`btn-${selectedCourseFilter === course ? 'primary' : 'secondary'}-pro`}
+                                  style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'black' }}
+                                >
+                                  {course} ({courseCount})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Download All PDF Button */}
+                      <div className="glass-card animate-slide-top" style={{ padding: '1.5rem', marginBottom: '2rem', borderRadius: '20px', textAlign: 'center' }}>
+                        <h4 style={{ color: '#1f2937', fontSize: '1.25rem', fontWeight: '700', marginBottom: '1rem' }}>
+                          📄 Download Complete Report
+                        </h4>
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                          Get a comprehensive PDF report with all {predictions.length} college predictions
+                        </p>
+                        <button
+                          onClick={downloadAllPredictionsPDF}
+                          className="btn-modern animate-pulse-glow"
+                          style={{
+                            padding: '1rem 2rem',
+                            fontSize: '1rem',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          📄 Download Complete PDF Report
+                        </button>
+                      </div>
+
+                      {/* Predictions List */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.2)', border: '1px solid rgba(255, 255, 255, 0.4)', borderRadius: '10px', display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr', gap: '1rem', fontWeight: '800', fontSize: '0.8rem', color: '#4b5563', textTransform: 'uppercase', textAlign: 'center' }}>
+                          <div>College Name</div>
+                          <div>City</div>
+                          <div>Branch</div>
+                          <div>Seat Type</div>
+                          <div>Closing %</div>
+                          <div>Chance</div>
+                        </div>
+                        {predictions
+                          .filter(prediction => selectedCourseFilter === 'all' || prediction.course === selectedCourseFilter)
+                          .map((prediction, index) => (
+                            <div key={index} className={`card-pro animate-slide-bottom ${prediction.riskLabel.toLowerCase()}`} style={{
+                              padding: '1.25rem',
+                              borderRadius: '15px',
+                              animationDelay: `${index * 0.05}s`,
+                              display: 'grid',
+                              gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr',
+                              gap: '1rem',
+                              alignItems: 'center',
+                              textAlign: 'center',
+                              background: prediction.riskLabel === 'Probable' ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
+                              borderLeft: `5px solid ${prediction.riskLabel === 'Probable' ? '#10b981' : '#f59e0b'}`
+                            }}>
+                              <div style={{ textAlign: 'left', fontWeight: '700', color: '#1f2937', fontSize: '1rem' }}>
+                                {prediction.name}
+                              </div>
+                              <div style={{ color: '#4b5563', fontWeight: '500' }}>
+                                {prediction.city || prediction.location.split(',')[0]}
+                              </div>
+                              <div style={{ color: '#4b5563', fontSize: '0.9rem', fontWeight: '600' }}>
+                                {prediction.branch}
+                              </div>
+                              <div>
+                                <span style={{
+                                  background: prediction.seatTypeLabel === 'TFWS' ? '#6366f1' : prediction.seatTypeLabel === 'Ladies' ? '#ec4899' : '#64748b',
+                                  color: 'white',
+                                  padding: '0.3rem 0.6rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '800'
+                                }}>
+                                  {prediction.seatTypeLabel}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#111827' }}>
+                                {prediction.cutoffForCategory}%
+                              </div>
+                              <div>
+                                <span className={`badge-pro ${prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.7rem', width: '100%', justifyContent: 'center' }}>
+                                  {prediction.riskLabel}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2183,19 +2168,19 @@ function App() {
           {activeTab === 'chat' && (
             <div className="animate-fade-in-pro" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               {/* Professional Header */}
-              <div className="glass-card-pro animate-slide-top" style={{ 
-                padding: '2rem', 
-                marginBottom: '2rem', 
+              <div className="glass-card-pro animate-slide-top" style={{
+                padding: '2rem',
+                marginBottom: '2rem',
                 borderRadius: '20px',
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 color: 'white',
                 textAlign: 'center'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  <div style={{ 
-                    width: '60px', 
-                    height: '60px', 
-                    borderRadius: '50%', 
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
                     background: 'rgba(255, 255, 255, 0.2)',
                     display: 'flex',
                     alignItems: 'center',
@@ -2213,11 +2198,11 @@ function App() {
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Capabilities */}
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: '1rem',
                   marginTop: '1.5rem'
                 }}>
@@ -2246,9 +2231,9 @@ function App() {
 
               {/* Quick Actions */}
               {!user && (
-                <div className="glass-card animate-slide-top" style={{ 
-                  padding: '1.5rem', 
-                  marginBottom: '2rem', 
+                <div className="glass-card animate-slide-top" style={{
+                  padding: '1.5rem',
+                  marginBottom: '2rem',
                   borderRadius: '15px',
                   background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)'
                 }}>
@@ -2261,10 +2246,10 @@ function App() {
                       </p>
                     </div>
                   </div>
-                  
-                  <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                     gap: '0.75rem',
                     marginTop: '1rem'
                   }}>
@@ -2278,12 +2263,12 @@ function App() {
                         key={index}
                         onClick={() => {
                           setChatInput(question);
-                          if (user) handleChatSubmit({ preventDefault: () => {} });
+                          if (user) handleChatSubmit({ preventDefault: () => { } });
                         }}
                         className="btn-secondary-pro"
-                        style={{ 
-                          padding: '0.75rem 1rem', 
-                          fontSize: '0.8rem', 
+                        style={{
+                          padding: '0.75rem 1rem',
+                          fontSize: '0.8rem',
                           textAlign: 'left',
                           background: 'rgba(255, 255, 255, 0.8)',
                           color: '#8b4513',
@@ -2300,15 +2285,15 @@ function App() {
               <div style={{ display: 'flex', gap: 'var(--space-6)', height: '100%' }}>
                 {/* Chat History Sidebar */}
                 {user && (
-                  <div className="card-pro" style={{ 
+                  <div className="card-pro" style={{
                     width: showChatHistory ? '300px' : '60px',
                     transition: 'all 0.3s ease',
                     display: 'flex',
                     flexDirection: 'column'
                   }}>
-                    <div className="card-header-pro" style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
+                    <div className="card-header-pro" style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: 'var(--space-4)'
                     }}>
@@ -2374,8 +2359,8 @@ function App() {
                                   }
                                 }}
                                 className="btn-secondary-pro"
-                                style={{ 
-                                  fontSize: '0.75rem', 
+                                style={{
+                                  fontSize: '0.75rem',
                                   padding: 'var(--space-1) var(--space-2)',
                                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                                   color: 'white',
@@ -2399,18 +2384,18 @@ function App() {
                 )}
 
                 {/* Professional Main Chat Container */}
-                <div className="card-pro" style={{ 
-                  flex: 1, 
-                  display: 'flex', 
+                <div className="card-pro" style={{
+                  flex: 1,
+                  display: 'flex',
                   flexDirection: 'column',
                   background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
                   border: '2px solid rgba(102, 126, 234, 0.1)',
                   boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
                 }}>
                   {/* Professional Chat Header */}
-                  <div className="card-header-pro" style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  <div className="card-header-pro" style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     color: 'white',
@@ -2418,10 +2403,10 @@ function App() {
                     borderRadius: '15px 15px 0 0'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ 
-                        width: '40px', 
-                        height: '40px', 
-                        borderRadius: '50%', 
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
                         background: 'rgba(255, 255, 255, 0.2)',
                         display: 'flex',
                         alignItems: 'center',
@@ -2462,10 +2447,10 @@ function App() {
                   </div>
 
                   {/* Professional Chat Messages */}
-                  <div className="card-body-pro chat-scroll" style={{ 
-                    flex: 1, 
-                    display: 'flex', 
-                    flexDirection: 'column', 
+                  <div className="card-body-pro chat-scroll" style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
                     gap: 'var(--space-4)',
                     maxHeight: '500px',
                     overflowY: 'auto',
@@ -2473,11 +2458,11 @@ function App() {
                     background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)'
                   }}>
                     {chatMessages.map((msg, index) => (
-                      <div 
-                        key={msg.id} 
+                      <div
+                        key={msg.id}
                         className={`animate-slide-in-pro`}
                         style={{
-                          display: 'flex', 
+                          display: 'flex',
                           justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start',
                           animationDelay: `${index * 0.05}s`,
                           alignItems: 'flex-end',
@@ -2501,20 +2486,20 @@ function App() {
                             🤖
                           </div>
                         )}
-                        
-                        <div 
+
+                        <div
                           className="card-pro"
                           style={{
-                            maxWidth: '75%', 
+                            maxWidth: '75%',
                             padding: msg.type === 'user' ? 'var(--space-4) var(--space-5)' : 'var(--space-4) var(--space-5)',
-                            background: msg.type === 'user' ? 
-                              'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 
+                            background: msg.type === 'user' ?
+                              'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' :
                               'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
                             color: msg.type === 'user' ? '#ffffff' : 'var(--gray-800)',
                             border: msg.type === 'user' ? 'none' : '2px solid rgba(102, 126, 234, 0.1)',
                             borderRadius: msg.type === 'user' ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
-                            boxShadow: msg.type === 'user' ? 
-                              '0 10px 25px rgba(102, 126, 234, 0.3)' : 
+                            boxShadow: msg.type === 'user' ?
+                              '0 10px 25px rgba(102, 126, 234, 0.3)' :
                               '0 5px 15px rgba(0, 0, 0, 0.08)'
                           }}
                         >
@@ -2524,9 +2509,9 @@ function App() {
                           }}>
                             {msg.message}
                           </div>
-                          <div 
+                          <div
                             className="text-xs opacity-75"
-                            style={{ 
+                            style={{
                               textAlign: msg.type === 'user' ? 'right' : 'left',
                               color: msg.type === 'user' ? 'rgba(255, 255, 255, 0.8)' : 'var(--gray-500)',
                               display: 'flex',
@@ -2562,10 +2547,10 @@ function App() {
                         )}
                       </div>
                     ))}
-                    
+
                     {chatLoading && (
-                      <div className="animate-slide-in-pro" style={{ 
-                        display: 'flex', 
+                      <div className="animate-slide-in-pro" style={{
+                        display: 'flex',
                         justifyContent: 'flex-start',
                         alignItems: 'flex-end',
                         gap: '0.75rem'
@@ -2585,7 +2570,7 @@ function App() {
                         }}>
                           🤖
                         </div>
-                        
+
                         <div className="card-pro" style={{
                           padding: 'var(--space-4) var(--space-5)',
                           background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
@@ -2593,33 +2578,33 @@ function App() {
                           borderRadius: '20px 20px 20px 5px',
                           boxShadow: '0 5px 15px rgba(0, 0, 0, 0.08)'
                         }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
                             gap: '0.75rem',
                             color: '#667eea',
                             fontWeight: '600'
                           }}>
-                            <div className="animate-spin" style={{ 
-                              width: '20px', 
-                              height: '20px', 
+                            <div className="animate-spin" style={{
+                              width: '20px',
+                              height: '20px',
                               border: '2px solid #e5e7eb',
                               borderTop: '2px solid #667eea',
                               borderRadius: '50%'
                             }}></div>
                             <span>AI Assistant is analyzing your query...</span>
                           </div>
-                          <div style={{ 
-                            fontSize: '0.75rem', 
-                            color: '#9ca3af', 
-                            marginTop: '0.5rem' 
+                          <div style={{
+                            fontSize: '0.75rem',
+                            color: '#9ca3af',
+                            marginTop: '0.5rem'
                           }}>
                             Processing 328+ colleges database
                           </div>
                         </div>
                       </div>
                     )}
-                    
+
                     <div ref={chatMessagesEndRef} />
                   </div>
 
@@ -2648,10 +2633,10 @@ function App() {
                         </div>
                       </div>
                     )}
-                    
-                    <form onSubmit={handleChatSubmit} style={{ 
-                      display: 'flex', 
-                      gap: 'var(--space-4)', 
+
+                    <form onSubmit={handleChatSubmit} style={{
+                      display: 'flex',
+                      gap: 'var(--space-4)',
                       alignItems: 'flex-end',
                       background: 'white',
                       padding: '1rem',
@@ -2667,7 +2652,7 @@ function App() {
                           onChange={(e) => setChatInput(e.target.value)}
                           disabled={chatLoading}
                           className="input-pro focus-ring-pro"
-                          style={{ 
+                          style={{
                             flex: 1,
                             border: 'none',
                             background: 'transparent',
@@ -2701,12 +2686,12 @@ function App() {
                         disabled={chatLoading || !chatInput.trim()}
                         className={`btn-primary-pro focus-ring-pro ${(chatLoading || !chatInput.trim()) ? 'opacity-50' : ''}`}
                         style={{
-                          padding: '0.75rem 1.5rem', 
-                          fontSize: '1rem', 
+                          padding: '0.75rem 1.5rem',
+                          fontSize: '1rem',
                           fontWeight: '600',
                           borderRadius: '20px',
-                          background: chatLoading || !chatInput.trim() ? 
-                            '#9ca3af' : 
+                          background: chatLoading || !chatInput.trim() ?
+                            '#9ca3af' :
                             'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                           border: 'none',
                           color: 'white',
@@ -2716,9 +2701,9 @@ function App() {
                       >
                         {chatLoading ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div className="animate-spin" style={{ 
-                              width: '16px', 
-                              height: '16px', 
+                            <div className="animate-spin" style={{
+                              width: '16px',
+                              height: '16px',
                               border: '2px solid rgba(255, 255, 255, 0.3)',
                               borderTop: '2px solid white',
                               borderRadius: '50%'
@@ -2830,7 +2815,7 @@ function App() {
                   </div>
                 </div>
               </div>
-              
+
               {selectedCollege.placements?.topRecruiters && (
                 <div style={{ marginTop: '1.5rem' }}>
                   <div style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem' }}>
@@ -2896,28 +2881,28 @@ function App() {
       {/* Professional Auth Modal */}
       {showAuthModal && (
         <div className="animate-fade-in-pro" style={{
-          position: 'fixed', 
-          inset: 0, 
-          backgroundColor: 'rgba(0, 0, 0, 0.6)', 
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
           display: 'flex',
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          zIndex: 50, 
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
           padding: 'var(--space-8)',
           backdropFilter: 'blur(12px)'
         }}>
           <div className="glass-card-white-pro animate-scale-pro" style={{
-            padding: 'var(--space-12)', 
-            width: '100%', 
+            padding: 'var(--space-12)',
+            width: '100%',
             maxWidth: '480px',
             position: 'relative'
           }}>
-            <button 
-              onClick={() => setShowAuthModal(false)} 
+            <button
+              onClick={() => setShowAuthModal(false)}
               className="btn-secondary-pro"
               style={{
-                position: 'absolute', 
-                top: 'var(--space-6)', 
+                position: 'absolute',
+                top: 'var(--space-6)',
                 right: 'var(--space-6)',
                 padding: 'var(--space-3)',
                 fontSize: '1.25rem',
@@ -2937,7 +2922,7 @@ function App() {
                 {authMode === 'login' ? 'Sign in to access your predictions' : 'Create your account to get started'}
               </p>
             </div>
-            
+
             <form onSubmit={handleAuth} className="grid-pro" style={{ gap: 'var(--space-6)' }}>
               {authMode === 'register' && (
                 <div>
@@ -2945,52 +2930,52 @@ function App() {
                     👤 Full Name
                   </label>
                   <input
-                    type="text" 
-                    placeholder="Enter your full name" 
+                    type="text"
+                    placeholder="Enter your full name"
                     value={authData.name}
-                    onChange={(e) => setAuthData({...authData, name: e.target.value})}
+                    onChange={(e) => setAuthData({ ...authData, name: e.target.value })}
                     className="input-pro focus-ring-pro"
                     required
                   />
                 </div>
               )}
-              
+
               <div>
                 <label className="block text-gray-700 font-semibold mb-2">
                   📧 Email Address
                 </label>
                 <input
-                  type="email" 
-                  placeholder="Enter your email address" 
+                  type="email"
+                  placeholder="Enter your email address"
                   value={authData.email}
-                  onChange={(e) => setAuthData({...authData, email: e.target.value})}
+                  onChange={(e) => setAuthData({ ...authData, email: e.target.value })}
                   className="input-pro focus-ring-pro"
                   required
                 />
               </div>
-              
+
               <div>
                 <label className="block text-gray-700 font-semibold mb-2">
                   🔒 Password
                 </label>
                 <input
-                  type="password" 
-                  placeholder="Enter your password" 
+                  type="password"
+                  placeholder="Enter your password"
                   value={authData.password}
-                  onChange={(e) => setAuthData({...authData, password: e.target.value})}
+                  onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
                   className="input-pro focus-ring-pro"
                   required
                 />
               </div>
-              
-              <button 
-                type="submit" 
-                disabled={loading} 
+
+              <button
+                type="submit"
+                disabled={loading}
                 className={`btn-primary-pro focus-ring-pro ${loading ? 'opacity-50' : ''}`}
                 style={{
-                  width: '100%', 
-                  padding: 'var(--space-5)', 
-                  fontSize: '1.125rem', 
+                  width: '100%',
+                  padding: 'var(--space-5)',
+                  fontSize: '1.125rem',
                   fontWeight: '700',
                   marginTop: 'var(--space-4)'
                 }}
@@ -2998,15 +2983,15 @@ function App() {
                 {loading ? '⏳ Processing...' : (authMode === 'login' ? '🚀 Sign In' : '✨ Create Account')}
               </button>
             </form>
-            
+
             <div className="text-center mt-8">
-              <button 
+              <button
                 onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
                 className="text-primary font-semibold hover:underline"
                 style={{ background: 'none', border: 'none', cursor: 'pointer' }}
               >
-                {authMode === 'login' ? 
-                  "🆕 Don't have an account? Create one" : 
+                {authMode === 'login' ?
+                  "🆕 Don't have an account? Create one" :
                   "🔙 Already have an account? Sign in"}
               </button>
             </div>

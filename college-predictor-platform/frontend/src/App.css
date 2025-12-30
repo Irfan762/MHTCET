@@ -1463,3 +1463,12 @@ button:focus {
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
+
+/* Prediction Status Classes */
+.probable {
+  border-left: 5px solid #10b981 !important;
+}
+
+.borderline {
+  border-left: 5px solid #f59e0b !important;
+}

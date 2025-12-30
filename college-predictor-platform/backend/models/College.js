@@ -1,5 +1,30 @@
 import mongoose from 'mongoose';
 
+const cutoffSchema = {
+  general: { type: Number, required: false, min: 0, max: 100, default: null },
+  obc: { type: Number, required: false, min: 0, max: 100, default: null },
+  sc: { type: Number, required: false, min: 0, max: 100, default: null },
+  st: { type: Number, required: false, min: 0, max: 100, default: null },
+  ews: { type: Number, required: false, min: 0, max: 100, default: null },
+  vjnt: { type: Number, required: false, min: 0, max: 100, default: null },
+  nt1: { type: Number, required: false, min: 0, max: 100, default: null },
+  nt2: { type: Number, required: false, min: 0, max: 100, default: null },
+  nt3: { type: Number, required: false, min: 0, max: 100, default: null },
+  sebc: { type: Number, required: false, min: 0, max: 100, default: null },
+  tfws: { type: Number, required: false, min: 0, max: 100, default: null },
+  ladies: {
+    general: { type: Number, required: false, min: 0, max: 100, default: null },
+    obc: { type: Number, required: false, min: 0, max: 100, default: null },
+    sc: { type: Number, required: false, min: 0, max: 100, default: null },
+    st: { type: Number, required: false, min: 0, max: 100, default: null },
+    vjnt: { type: Number, required: false, min: 0, max: 100, default: null },
+    nt1: { type: Number, required: false, min: 0, max: 100, default: null },
+    nt2: { type: Number, required: false, min: 0, max: 100, default: null },
+    nt3: { type: Number, required: false, min: 0, max: 100, default: null },
+    sebc: { type: Number, required: false, min: 0, max: 100, default: null }
+  }
+};
+
 const collegeSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -44,152 +69,11 @@ const collegeSchema = new mongoose.Schema({
     seats: {
       type: Number,
       min: 0
-    }
+    },
+    cutoff: cutoffSchema
   }],
-  cutoff: {
-    general: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    obc: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    sc: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    st: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    ews: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    vjnt: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    nt1: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    nt2: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    nt3: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    sebc: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    tfws: {
-      type: Number,
-      required: false,
-      min: 0,
-      max: 100,
-      default: null
-    },
-    ladies: {
-      general: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      obc: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      sc: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      st: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      vjnt: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      nt1: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      nt2: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      nt3: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      },
-      sebc: {
-        type: Number,
-        required: false,
-        min: 0,
-        max: 100,
-        default: null
-      }
-    }
-  },
+  cutoff: cutoffSchema,
+
   fees: {
     annual: {
       type: Number,

@@ -43,7 +43,7 @@ app.use(cookieParser());
 
 // Basic routes
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'MHT-CET Predictor API with MongoDB is running!',
     version: '2.0.0',
     database: 'MongoDB',
@@ -59,7 +59,7 @@ app.get('/', (req, res) => {
 
 // Simple test endpoint
 app.get('/test', (req, res) => {
-  res.json({ 
+  res.json({
     success: true,
     message: 'Backend is reachable!',
     timestamp: new Date().toISOString()
@@ -71,9 +71,9 @@ app.get('/health', async (req, res) => {
     // Check database connection
     const collegeCount = await College.countDocuments();
     const userCount = await User.countDocuments();
-    
-    res.json({ 
-      status: 'OK', 
+
+    res.json({
+      status: 'OK',
       timestamp: new Date().toISOString(),
       database: 'Connected',
       stats: {
@@ -101,7 +101,7 @@ app.post('/api/seed', async (req, res) => {
     }
 
     await seedColleges();
-    
+
     res.json({
       success: true,
       message: 'Database seeded successfully'
@@ -284,7 +284,7 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/profile', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate('predictions');
-    
+
     res.json({
       success: true,
       user: {
@@ -310,10 +310,10 @@ app.get('/api/auth/profile', authenticate, async (req, res) => {
 // Colleges endpoint with MongoDB
 app.get('/api/colleges', optionalAuth, async (req, res) => {
   try {
-    const { 
-      search, 
-      type, 
-      city, 
+    const {
+      search,
+      type,
+      city,
       course,
       minCutoff,
       maxCutoff,
@@ -425,7 +425,7 @@ app.get('/api/colleges', optionalAuth, async (req, res) => {
 app.get('/api/colleges/:id', async (req, res) => {
   try {
     const college = await College.findById(req.params.id);
-    
+
     if (!college) {
       return res.status(404).json({
         success: false,
@@ -449,7 +449,7 @@ app.get('/api/colleges/:id', async (req, res) => {
 // Enhanced Predictions endpoint with real MHT-CET data
 app.post('/api/predictions', optionalAuth, async (req, res) => {
   try {
-    const { percentile, category, courses } = req.body;
+    const { percentile, category, courses, universityType, includeLadies, includeTFWS } = req.body;
 
     // Validation
     if (!percentile || !category || !courses || !Array.isArray(courses) || courses.length === 0) {
@@ -459,7 +459,8 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
       });
     }
 
-    if (percentile < 0 || percentile > 100) {
+    const userPercentile = parseFloat(percentile);
+    if (userPercentile < 0 || userPercentile > 100) {
       return res.status(400).json({
         success: false,
         message: 'Percentile must be between 0 and 100'
@@ -478,256 +479,208 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
           { 'courses.name': new RegExp(course, 'i') },
           { 'courses.name': new RegExp(course.replace(/Engineering|Engg/, '(Engineering|Engg)'), 'i') },
           { 'courses.name': new RegExp(course.replace(/Computer Science/, 'Computer'), 'i') },
-          { 'courses.name': new RegExp(course.replace(/Information Technology/, 'IT'), 'i') }
+          { 'courses.name': new RegExp(course.replace(/Information Technology/, 'IT'), 'i') },
+          { 'courses.name': new RegExp(course.split(' ')[0], 'i') } // Match the first word (e.g., "Computer")
         ]
       }).lean();
 
       if (colleges.length > 0) {
-        // Generate enhanced predictions for this course
+        // Generate enhanced predictions for this course using Expert rules
         const coursePredictions = colleges.map((college, index) => {
-          // Find the specific course cutoff or use college overall cutoff
-          const specificCourse = college.courses.find(c => 
+          // Find the specific course
+          const specificCourse = college.courses.find(c =>
             c.name.toLowerCase().includes(course.toLowerCase()) ||
             course.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]) ||
-            (course.includes('Computer') && c.name.includes('Computer')) ||
-            (course.includes('Information') && c.name.includes('Information'))
+            (course.includes('Computer') && c.name.toLowerCase().includes('computer')) ||
+            (course.includes('Information') && c.name.toLowerCase().includes('information'))
           );
-          
-          // Get category-specific cutoff with comprehensive mapping
-          const getCutoffForCategory = (college, course, category) => {
-            // Map frontend category values to database field names
-            const categoryMapping = {
-              'general': 'general',
-              'obc': 'obc', 
-              'sc': 'sc',
-              'st': 'st',
-              'ews': 'ews',
-              'vjnt': 'vjnt',
-              'nt1': 'nt1',
-              'nt2': 'nt2', 
-              'nt3': 'nt3',
-              'sebc': 'sebc',
-              'tfws': 'tfws',
-              'ladies_general': ['ladies', 'general'],
-              'ladies_obc': ['ladies', 'obc'],
-              'ladies_sc': ['ladies', 'sc'],
-              'ladies_st': ['ladies', 'st'],
-              'ladies_vjnt': ['ladies', 'vjnt'],
-              'ladies_nt1': ['ladies', 'nt1'],
-              'ladies_nt2': ['ladies', 'nt2'],
-              'ladies_nt3': ['ladies', 'nt3'],
-              'ladies_sebc': ['ladies', 'sebc']
-            };
-            
-            const categoryKey = category.toLowerCase();
-            const mapping = categoryMapping[categoryKey];
-            
+
+          if (!specificCourse) return null;
+
+          // MHT-CET Expert Rule: Use General/OPEN for this specific task
+          const expertCategory = 'general';
+
+          // Category mapping logic (Expert override for Category = OPEN)
+          const getExpertCutoff = (college, course, isLadies, isTFWS) => {
             let cutoff = null;
-            
-            // Try course-specific cutoff first
-            if (course && course.cutoff) {
-              if (Array.isArray(mapping)) {
-                // Handle nested categories like ladies
-                cutoff = course.cutoff[mapping[0]] && course.cutoff[mapping[0]][mapping[1]];
-              } else if (mapping) {
-                cutoff = course.cutoff[mapping];
-              }
+            let seatType = 'HU';
+
+            // Priority 1: TFWS (Strictly if selected)
+            if (isTFWS) {
+              cutoff = course.cutoff?.tfws || college.cutoff?.tfws;
+              if (cutoff) seatType = 'TFWS';
             }
-            
-            // Fallback to college cutoff
-            if (!cutoff && college.cutoff) {
-              if (Array.isArray(mapping)) {
-                cutoff = college.cutoff[mapping[0]] && college.cutoff[mapping[0]][mapping[1]];
-              } else if (mapping) {
-                cutoff = college.cutoff[mapping];
-              }
+
+            // Priority 2: Ladies (Strictly if selected)
+            if (!cutoff && isLadies) {
+              cutoff = course.cutoff?.ladies?.general || college.cutoff?.ladies?.general;
+              if (cutoff) seatType = 'Ladies';
             }
-            
-            // Final fallback to general category
+
+            // Priority 3: General/OPEN (Standard)
             if (!cutoff) {
-              if (course && course.cutoff && course.cutoff.general) {
-                cutoff = course.cutoff.general;
-              } else if (college.cutoff && college.cutoff.general) {
-                cutoff = college.cutoff.general;
-              }
+              cutoff = course.cutoff?.[expertCategory] || college.cutoff?.[expertCategory];
+              seatType = 'HU';
             }
-            
-            return cutoff;
+
+            return { cutoff, seatType };
           };
-          
-          const cutoffForCategory = getCutoffForCategory(college, specificCourse, category);
-          
-          // Skip if no cutoff data available
-          if (!cutoffForCategory || cutoffForCategory === 0) {
+
+          const { cutoff: cutoffValue, seatType } = getExpertCutoff(college, specificCourse, includeLadies, includeTFWS);
+
+          if (!cutoffValue) return null;
+
+          // MHT-CET Expert Rule: University Type = Home University only (Adjustment = 0)
+          const adjustedCutoff = cutoffValue;
+          const difference = parseFloat((userPercentile - adjustedCutoff).toFixed(2));
+
+          // Filtering Rule: [ user_percentile → user_percentile + 3 ]
+          // This means inclusion if current_cutoff >= user_percentile AND current_cutoff <= user_percentile + 3
+          // Note: Higher cutoff means "Dream/Difficult" relative to user, but 
+          // eligibility is usually userScore >= cutoff. 
+          // However, the prompt says "Include colleges whose closing percentile lies in the range [user_percentile -> user_percentile + 3]"
+          // In MHT-CET, "Closing Percentile" usually refers to the cutoff.
+          // So we filter: cutoff >= userPercentile && cutoff <= userPercentile + 3
+          if (adjustedCutoff < userPercentile || adjustedCutoff > userPercentile + 3) {
             return null;
           }
-          
-          const difference = parseFloat((percentile - cutoffForCategory).toFixed(2));
-          
-          // Enhanced probability calculation based on real MHT-CET patterns
-          let probability = "Low";
-          let probabilityScore = 0;
-          
-          if (difference >= 3) {
-            probability = "High";
-            probabilityScore = 0.95;
-          } else if (difference >= 1) {
-            probability = "High";
-            probabilityScore = 0.85;
-          } else if (difference >= 0) {
-            probability = "High";
-            probabilityScore = 0.75;
-          } else if (difference >= -1) {
-            probability = "Medium";
-            probabilityScore = 0.65;
-          } else if (difference >= -2) {
-            probability = "Medium";
-            probabilityScore = 0.45;
-          } else if (difference >= -3) {
-            probability = "Low";
-            probabilityScore = 0.25;
+
+          // Advanced Probability Scoring for the [Marks, Marks + 3] range
+          let admissionChance = 0;
+          let probability = "Borderline";
+
+          if (difference >= 0) {
+            admissionChance = 85; // This case actually shouldn't happen much with the range filter being [0, +3] for cutoff
+            probability = "Probable";
+          } else if (difference >= -1.5) {
+            admissionChance = 60;
+            probability = "Probable";
           } else {
-            probability = "Low";
-            probabilityScore = 0.1;
+            admissionChance = 40;
+            probability = "Borderline";
           }
+
+          // Category labels for UI
+          let riskLabel = "Risk";
+          if (admissionChance >= 60) riskLabel = "Probable";
+          else riskLabel = "Borderline";
 
           return {
             college: college._id,
-            probability,
-            probabilityScore,
-            cutoffForCategory,
+            name: college.name,
+            location: college.location,
+            city: college.city || college.location.split(',')[0],
+            type: college.type,
+            branch: specificCourse.name, // For the requested format
+            course: specificCourse.name,
+            seatTypeLabel: seatType, // (HU / Ladies / TFWS)
+            cutoffForCategory: cutoffValue,
+            adjustedCutoff,
             difference,
-            rank: index + 1,
-            course,
+            admissionChance,
+            probability,
+            riskLabel,
             fees: college.fees.formatted,
             placements: {
               averagePackage: college.placements.averagePackage.formatted,
               highestPackage: college.placements.highestPackage.formatted,
               placementRate: `${college.placements.placementRate}%`
             },
-            // Include college details for frontend
-            name: college.name,
-            location: college.location,
-            type: college.type,
             ranking: college.ranking,
             featured: college.featured,
             establishedYear: college.establishedYear
           };
-        }).filter(p => p !== null); // Remove null predictions
+        }).filter(p => p !== null);
 
-        // Sort by probability score and difference
-        coursePredictions.sort((a, b) => {
-          if (a.probabilityScore !== b.probabilityScore) {
-            return b.probabilityScore - a.probabilityScore;
-          }
-          return b.difference - a.difference;
-        });
+        if (coursePredictions.length > 0) {
+          // Sorting Rule: Descending order of closing percentile (Highest cutoff first)
+          coursePredictions.sort((a, b) => b.adjustedCutoff - a.adjustedCutoff);
 
-        // Update ranks after sorting
-        coursePredictions.forEach((pred, index) => {
-          pred.rank = index + 1;
-        });
+          // Assign ranks within this selection
+          coursePredictions.forEach((p, idx) => p.rank = idx + 1);
 
-        courseResults[course] = coursePredictions;
-        allPredictions.push(...coursePredictions);
+          courseResults[course] = coursePredictions;
+          allPredictions.push(...coursePredictions);
+        } else {
+          courseResults[course] = [];
+        }
       }
     }
 
     if (allPredictions.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No colleges found for the selected courses with available cutoff data'
+        message: 'No colleges found between same and +3 percentile. Try another percentile.'
       });
     }
 
-    // Sort all predictions by probability score and difference
-    allPredictions.sort((a, b) => {
-      if (a.probabilityScore !== b.probabilityScore) {
-        return b.probabilityScore - a.probabilityScore;
-      }
-      return b.difference - a.difference;
-    });
+    // Sort combined results: Highest cutoffs first
+    allPredictions.sort((a, b) => b.adjustedCutoff - a.adjustedCutoff);
 
-    // Update overall ranks
-    allPredictions.forEach((pred, index) => {
-      pred.overallRank = index + 1;
-    });
-
-    // Calculate enhanced metadata
+    // Calculate metadata
     const metadata = {
       totalColleges: allPredictions.length,
       totalCourses: courses.length,
-      highProbability: allPredictions.filter(p => p.probability === 'High').length,
-      mediumProbability: allPredictions.filter(p => p.probability === 'Medium').length,
-      lowProbability: allPredictions.filter(p => p.probability === 'Low').length,
-      averageCutoff: allPredictions.reduce((sum, p) => sum + p.cutoffForCategory, 0) / allPredictions.length,
-      courseBreakdown: Object.keys(courseResults).map(course => ({
-        course,
-        totalColleges: courseResults[course].length,
-        highProbability: courseResults[course].filter(p => p.probability === 'High').length,
-        mediumProbability: courseResults[course].filter(p => p.probability === 'Medium').length,
-        lowProbability: courseResults[course].filter(p => p.probability === 'Low').length,
-        averageCutoff: courseResults[course].length > 0 ? 
-          courseResults[course].reduce((sum, p) => sum + p.cutoffForCategory, 0) / courseResults[course].length : 0
-      })),
-      algorithmVersion: '3.0',
-      dataSource: 'MHT-CET 2025 Official Data'
+      highChance: allPredictions.filter(p => p.admissionChance >= 60).length,
+      mediumChance: allPredictions.filter(p => p.admissionChance >= 40 && p.admissionChance < 60).length,
+      lowChance: allPredictions.filter(p => p.admissionChance < 40).length,
+      averageChance: allPredictions.length > 0 ? Math.round(allPredictions.reduce((sum, p) => sum + p.admissionChance, 0) / allPredictions.length) : 0,
+      universityApplied: "Home University (Expert Rule)",
+      algorithmVersion: '5.0 (MHT-CET Expert Pro)'
     };
 
-    // Save prediction to database only if user is authenticated
+    // Save history if user is logged in
     let predictionId = null;
     if (req.user) {
       const predictionDoc = new Prediction({
         user: req.user._id,
         inputData: {
-          percentile: parseFloat(percentile),
+          percentile: userPercentile,
           category,
-          courses, // Now stores array of courses
+          course: courses,
+          universityType,
+          includeLadies,
+          includeTFWS,
           examType: 'MHT-CET',
-          examYear: new Date().getFullYear()
+          examYear: 2025
         },
         predictions: allPredictions.map(p => ({
           college: p.college,
+          course: p.course,
           probability: p.probability,
+          admissionChance: p.admissionChance,
+          riskLabel: p.riskLabel,
           cutoffForCategory: p.cutoffForCategory,
+          adjustedCutoff: p.adjustedCutoff,
           difference: p.difference,
           rank: p.rank,
-          course: p.course,
           fees: p.fees,
           placements: p.placements
         })),
         metadata
       });
-
       await predictionDoc.save();
       predictionId = predictionDoc._id;
-
-      // Add prediction to user's predictions array
-      await User.findByIdAndUpdate(req.user._id, {
-        $push: { predictions: predictionDoc._id }
-      });
     }
 
     res.json({
       success: true,
       predictions: allPredictions,
-      courseResults, // Predictions grouped by course
-      inputPercentile: percentile,
-      category,
-      courses,
-      examType: "MHT-CET 2025",
+      courseResults,
       metadata,
-      predictionId: predictionId
+      predictionId,
+      inputParams: { percentile, category, courses, universityType }
     });
   } catch (error) {
     console.error('Prediction error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to generate predictions',
+      message: 'Failed to generate accurate predictions',
       error: error.message
     });
   }
 });
+
 
 // Get user's prediction history
 app.get('/api/predictions/history', authenticate, async (req, res) => {
@@ -765,7 +718,7 @@ app.get('/api/predictions/history', authenticate, async (req, res) => {
 app.delete('/api/predictions/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const prediction = await Prediction.findOneAndDelete({
       _id: id,
       user: req.user._id
@@ -800,7 +753,7 @@ app.delete('/api/predictions/:id', authenticate, async (req, res) => {
 app.delete('/api/predictions', authenticate, async (req, res) => {
   try {
     const result = await Prediction.deleteMany({ user: req.user._id });
-    
+
     // Clear user's predictions array
     await User.findByIdAndUpdate(req.user._id, {
       $set: { predictions: [] }
@@ -885,9 +838,9 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
     // Save chat message if user is authenticated and sessionId is provided
     if (req.user && sessionId) {
       try {
-        let chatDoc = await ChatMessage.findOne({ 
-          user: req.user._id, 
-          sessionId 
+        let chatDoc = await ChatMessage.findOne({
+          user: req.user._id,
+          sessionId
         });
 
         if (!chatDoc) {
@@ -953,22 +906,22 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
 app.get('/api/chat/history', authenticate, async (req, res) => {
   try {
     const { limit = 10, page = 1 } = req.query;
-    
+
     const chatSessions = await ChatMessage.find({
       user: req.user._id,
       isActive: true
     })
-    .sort({ updatedAt: -1 })
-    .limit(parseInt(limit))
-    .skip((parseInt(page) - 1) * parseInt(limit))
-    .select('sessionId messages updatedAt context')
-    .lean();
+      .sort({ updatedAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .select('sessionId messages updatedAt context')
+      .lean();
 
     // Transform sessions for frontend
     const sessions = chatSessions.map(session => {
       const lastMessage = session.messages[session.messages.length - 1];
       const firstUserMessage = session.messages.find(msg => msg.type === 'user');
-      
+
       return {
         sessionId: session.sessionId,
         lastMessage: session.updatedAt,
@@ -1007,7 +960,7 @@ app.get('/api/chat/history', authenticate, async (req, res) => {
 app.get('/api/chat/history/:sessionId', authenticate, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    
+
     const chatDoc = await ChatMessage.findOne({
       user: req.user._id,
       sessionId
@@ -1037,7 +990,7 @@ app.get('/api/chat/history/:sessionId', authenticate, async (req, res) => {
 app.delete('/api/chat/history/:sessionId', authenticate, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    
+
     const result = await ChatMessage.findOneAndDelete({
       user: req.user._id,
       sessionId
@@ -1085,7 +1038,7 @@ app.delete('/api/chat/history', authenticate, async (req, res) => {
 app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
   try {
     const { predictions, studentInfo, predictionId } = req.body;
-    
+
     // Update download count if predictionId is provided and user is authenticated
     if (predictionId && req.user) {
       await Prediction.findByIdAndUpdate(predictionId, {
@@ -1200,13 +1153,13 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
         <div class="container">
           <div class="header">
             <h1>🎓 MHT-CET 2025 College Prediction Report</h1>
-            <p><strong>Generated on:</strong> ${new Date().toLocaleDateString('en-IN', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}</p>
+            <p><strong>Generated on:</strong> ${new Date().toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}</p>
             <p><strong>Report ID:</strong> ${predictionId || 'Guest User'}</p>
           </div>
           
@@ -1234,51 +1187,32 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
           
           <h3 style="color: #2563eb; margin-bottom: 20px;">🏛️ College Predictions (${predictions.length} Results)</h3>
           
-          ${predictions.slice(0, 20).map((college, index) => `
-            <div class="college ${college.probability.toLowerCase()}">
+          ${predictions.map((college, index) => `
+            <div class="college ${college.riskLabel.toLowerCase()}">
               <h4>${index + 1}. ${college.name}</h4>
               <div class="college-info">
-                <p><strong>📍 Location:</strong> ${college.location}</p>
-                <p><strong>🎓 Course:</strong> ${college.course}</p>
-                <p><strong>🎲 Admission Probability:</strong> 
-                  <span class="probability-${college.probability.toLowerCase()}">
-                    ${college.probability}
+                <p><strong>📍 City:</strong> ${college.city || college.location.split(',')[0]}</p>
+                <p><strong>� Branch:</strong> ${college.branch || college.course}</p>
+                <p><strong>🪑 Seat Type:</strong> ${college.seatTypeLabel || 'HU'}</p>
+                <p><strong>🎲 Admission Chance:</strong> 
+                  <span class="probability-${college.riskLabel.toLowerCase()}">
+                    ${college.riskLabel} (${college.admissionChance}%)
                   </span>
                 </p>
               </div>
               
               <div class="stats-grid">
                 <div class="stat-card">
-                  <strong>Required Cutoff</strong>
+                  <strong>Closing Percentile</strong>
                   ${college.cutoffForCategory}%
                 </div>
                 <div class="stat-card">
-                  <strong>Score Difference</strong>
-                  <span class="${college.difference >= 0 ? 'positive' : 'negative'}">
-                    ${college.difference > 0 ? '+' : ''}${college.difference}%
-                  </span>
+                  <strong>State Rank Approx</strong>
+                  ${college.rank || 'N/A'}
                 </div>
                 <div class="stat-card">
                   <strong>Annual Fees</strong>
                   ${college.fees}
-                </div>
-              </div>
-              
-              <div class="placement-info">
-                <h5>💼 Placement Statistics</h5>
-                <div class="stats-grid">
-                  <div class="stat-card">
-                    <strong>Average Package</strong>
-                    ${college.placements.averagePackage}
-                  </div>
-                  <div class="stat-card">
-                    <strong>Highest Package</strong>
-                    ${college.placements.highestPackage}
-                  </div>
-                  <div class="stat-card">
-                    <strong>Placement Rate</strong>
-                    ${college.placements.placementRate}
-                  </div>
                 </div>
               </div>
             </div>
@@ -1316,10 +1250,10 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    
+
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-    
+
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -1330,16 +1264,16 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
         left: '20px'
       }
     });
-    
+
     await browser.close();
 
     // Set headers for PDF download
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="MHT-CET-Prediction-Report-${Date.now()}.pdf"`);
     res.setHeader('Content-Length', pdfBuffer.length);
-    
+
     res.send(pdfBuffer);
-    
+
   } catch (error) {
     console.error('PDF generation error:', error);
     res.status(500).json({
@@ -1354,7 +1288,7 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
 app.get('/api/placements', async (req, res) => {
   try {
     const { college, branch } = req.query;
-    
+
     // Mock placement data - in real implementation, this would come from database
     const placementData = {
       overall: {
@@ -1520,7 +1454,7 @@ app.get('/api/placements', async (req, res) => {
     let responseData = placementData;
 
     if (college) {
-      const collegeData = placementData.colleges.find(c => 
+      const collegeData = placementData.colleges.find(c =>
         c.name.toLowerCase().includes(college.toLowerCase())
       );
       if (collegeData) {
@@ -1532,7 +1466,7 @@ app.get('/api/placements', async (req, res) => {
     }
 
     if (branch) {
-      const branchData = placementData.branchWiseOverall.find(b => 
+      const branchData = placementData.branchWiseOverall.find(b =>
         b.branch.toLowerCase().includes(branch.toLowerCase())
       );
       if (branchData) {
@@ -1612,7 +1546,7 @@ app.get('/api/stats', async (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
-  res.status(500).json({ 
+  res.status(500).json({
     success: false,
     message: 'Something went wrong!',
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
@@ -1623,13 +1557,13 @@ app.use((err, req, res, next) => {
 app.post('/api/seed-colleges', async (req, res) => {
   try {
     console.log('🔄 Starting college seeding via API...');
-    
+
     // Import the seeder
     const { seedColleges } = await import('./seeders/collegeSeeder.js');
-    
+
     // Run the seeder
     const colleges = await seedColleges();
-    
+
     res.json({
       success: true,
       message: `Successfully seeded ${colleges.length} colleges`,
@@ -1647,7 +1581,7 @@ app.post('/api/seed-colleges', async (req, res) => {
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     success: false,
     message: 'Route not found',
     availableEndpoints: [
