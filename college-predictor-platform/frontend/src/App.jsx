@@ -35,16 +35,71 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
+  const [adminUsers, setAdminUsers] = useState([]); // Admin State
 
-  // Form states
+  const courseOptions = [
+    'Computer Engineering',
+    'Information Technology',
+    'Electronics & Telecom',
+    'Mechanical Engineering',
+    'Civil Engineering',
+    'Electrical Engineering',
+    'Artificial Intelligence & Data Science',
+    'Chemical Engineering'
+  ];
+
   const [formData, setFormData] = useState({
     percentile: '',
     category: 'General',
     courses: ['Computer Engineering'], // Changed to array for multiple selection
     universityType: 'Home University',
-    includeLadies: false,
-    includeTFWS: false
+    includeTFWS: false,
+    city: 'All Cities'
   });
+
+  const fetchAdminUsers = async () => {
+    console.log('Fetching admin users...');
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      console.log('Token used:', token ? 'Found' : 'Missing');
+
+      const response = await fetch('http://127.0.0.1:3001/api/admin/users', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      console.log('Response status:', response.status);
+
+      const data = await response.json();
+      console.log('Admin users data:', data);
+
+      if (data.success) {
+        setAdminUsers(data.users);
+      } else {
+        console.error('Fetch failed:', data.message);
+        addNotification('Failed to fetch users: ' + data.message, 'error');
+      }
+    } catch (error) {
+      console.error('Admin fetch error:', error);
+      addNotification('Error fetching users', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'adminUser' && user?.role === 'admin') {
+      fetchAdminUsers();
+    }
+  }, [activeTab, user]);
+
+  const sidebarItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '🏠', desc: 'Overview & Stats' },
+    { id: 'predictor', label: 'AI Predictor', icon: '🎯', desc: 'Smart Predictions' },
+    { id: 'colleges', label: 'Colleges', icon: '🏛️', desc: 'Explore Colleges' },
+    { id: 'placements', label: 'Placements', icon: '💼', desc: 'Career Data' },
+    { id: 'results', label: 'My Results', icon: '📊', desc: 'Your Predictions' },
+    { id: 'chat', label: 'AI Assistant', icon: '🤖', desc: 'Comprehensive Help' },
+    ...(user?.role === 'admin' ? [{ id: 'adminUser', label: 'Admin Panel', icon: '👑', desc: 'Student Management' }] : [])
+  ];
 
   const [authData, setAuthData] = useState({
     name: '',
@@ -106,6 +161,14 @@ function App() {
         },
         credentials: 'include'
       });
+
+      if (response.status === 401) {
+        console.warn('Session expired while loading history');
+        handleLogout();
+        addNotification('Session expired. Please login again to save history.', 'warning');
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         setPredictionHistory(data.predictions || []);
@@ -334,23 +397,22 @@ function App() {
   const handlePrediction = async (e) => {
     e.preventDefault();
 
-    // Temporary bypass for testing - remove this later
-    if (!user) {
-      const tempUser = { id: 'temp', name: 'Test User', email: 'test@test.com' };
-      setUser(tempUser);
-      localStorage.setItem('mhtcet_user', JSON.stringify(tempUser));
-      localStorage.setItem('mhtcet_token', 'temp-token');
-    }
-
     setLoading(true);
     try {
-      const token = localStorage.getItem('mhtcet_token') || 'temp-token';
+      const token = localStorage.getItem('mhtcet_token');
+
+      // Build headers - only include Authorization if we have a real token
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+
+      if (token && token !== 'temp-token') {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('http://127.0.0.1:3001/api/predictions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify(formData),
       });
@@ -359,7 +421,17 @@ function App() {
         setPredictions(data.predictions);
         setSelectedCourseFilter('all'); // Reset filter for new predictions
         setActiveTab('results');
-        loadPredictionHistory(); // Reload prediction history after new prediction
+        if (user) {
+          if (!data.predictionId) {
+            // Frontend thinks we are logged in, but backend didn't save it -> Session Expired (Token Invalid)
+            addNotification('Prediction generated but not saved to history. Session may have expired.', 'warning');
+            loadPredictionHistory(); // This will trigger the 401 check and logout if needed
+          } else {
+            loadPredictionHistory(); // Reload to see the new item
+            // Only show double notification if we want to confirm save
+            // addNotification('🎉 Predictions generated and saved to history!', 'success');
+          }
+        }
         addNotification('🎉 Predictions generated successfully!', 'success');
       } else {
         addNotification(data.message || 'Failed to generate predictions', 'error');
@@ -497,6 +569,7 @@ function App() {
             currentSection: activeTab,
             selectedCollege: selectedCollege?.name,
             userCategory: formData.category,
+            userPercentile: formData.percentile, // Added for personalized predictions
             userCourses: formData.courses, // Changed from userCourse to userCourses
             colleges: colleges.slice(0, 10).map(c => ({ name: c.name, location: c.location }))
           }
@@ -618,6 +691,33 @@ function App() {
     }
   };
 
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Are you sure you want to delete this user?\nThis action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch(`http://127.0.0.1:3001/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        addNotification('User deleted successfully', 'success');
+        fetchAdminUsers(); // Refresh list
+      } else {
+        addNotification(data.message || 'Failed to delete user', 'error');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      addNotification('Error deleting user', 'error');
+    }
+  };
+
   const openCollegeModal = (college) => {
     setSelectedCollege(college);
     setShowCollegeModal(true);
@@ -625,632 +725,247 @@ function App() {
 
   const filteredColleges = colleges.filter(college =>
     college.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    college.location.toLowerCase().includes(searchTerm.toLowerCase())
+    (college.location && college.location.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const sidebarItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '🏠', desc: 'Overview & Stats' },
-    { id: 'predictor', label: 'AI Predictor', icon: '🎯', desc: 'Smart Predictions' },
-    { id: 'colleges', label: 'Colleges', icon: '🏛️', desc: 'Explore Colleges' },
-    { id: 'placements', label: 'Placements', icon: '💼', desc: 'Career Data' },
-    { id: 'results', label: 'My Results', icon: '📊', desc: 'Your Predictions' },
-    { id: 'chat', label: 'AI Assistant', icon: '🤖', desc: 'Comprehensive Help' }
-  ];
+  const uniqueCities = ['All Cities', ...new Set(colleges.map(c => c.city || (c.location && c.location.split(',')[0]) || 'Unknown').filter(city => city !== 'Unknown'))].sort((a, b) => a === 'All Cities' ? -1 : a.localeCompare(b));
+
+
+
 
   return (
-    <div style={{
-      display: 'flex',
-      height: '100vh',
-      background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
-      fontFamily: 'var(--font-sans)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Animated Background Particles */}
-      <div className="particles">
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={i}
-            className="particle animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              width: `${Math.random() * 6 + 3}px`,
-              height: `${Math.random() * 6 + 3}px`,
-              animationDelay: `${Math.random() * 8}s`,
-              animationDuration: `${Math.random() * 6 + 6}s`,
-              background: 'rgba(255, 255, 255, 0.08)',
-              borderRadius: '50%'
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Professional Notifications */}
-      <div style={{
-        position: 'fixed', top: 'var(--space-6)', right: 'var(--space-6)', zIndex: 1000,
-        display: 'flex', flexDirection: 'column', gap: 'var(--space-4)'
-      }}>
-        {notifications.map((notification) => (
-          <div key={notification.id} className={`notification-pro notification-${notification.type} animate-slide-in-pro`}>
-            <div style={{
-              fontSize: '1.25rem',
-              color: notification.type === 'success' ? 'var(--success-600)' :
-                notification.type === 'error' ? 'var(--error-500)' :
-                  notification.type === 'warning' ? 'var(--warning-500)' : 'var(--primary-600)'
-            }}>
-              {notification.type === 'success' ? '✅' :
-                notification.type === 'error' ? '❌' :
-                  notification.type === 'warning' ? '⚠️' : 'ℹ️'}
-            </div>
-            <div>
-              <div className="font-semibold text-sm text-gray-800">
-                {notification.message}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                {new Date(notification.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Professional Sidebar */}
-      <div className="glass-card-dark-pro animate-slide-in-pro" style={{
-        width: sidebarOpen ? '340px' : '80px',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        display: 'flex', flexDirection: 'column',
-        margin: 'var(--space-4)',
-        boxShadow: 'var(--shadow-2xl)'
-      }}>
-        {/* Sidebar Header */}
-        <div style={{
-          padding: 'var(--space-8) var(--space-6)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-        }}>
-          {sidebarOpen && (
-            <div className="animate-fade-in-pro">
-              <h1 className="gradient-text-pro text-2xl font-black m-0">
-                🎓 MHT-CET Pro
-              </h1>
-              <p className="text-sm font-medium m-0 mt-1" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                ✨ Professional Engineering Portal
-              </p>
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="btn-secondary-pro"
-            style={{ padding: 'var(--space-3)', fontSize: '1.125rem' }}
-          >
-            {sidebarOpen ? '←' : '→'}
-          </button>
+    <div className="app-container">
+      {/* Sidebar */}
+      <aside className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
+        <div className="brand">
+          <div className="brand-icon">🎓</div>
+          {sidebarOpen && <h1 style={{ fontSize: '20px', fontWeight: 800 }}>MHT-CET Pro</h1>}
         </div>
 
-        {/* Navigation Items */}
-        <nav style={{ flex: 1, padding: 'var(--space-6) 0' }}>
-          {sidebarItems.map((item, index) => (
+        <nav className="nav-group">
+          {sidebarItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className="animate-slide-in-pro"
-              style={{
-                width: '100%',
-                padding: 'var(--space-4) var(--space-6)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-4)',
-                fontSize: '0.875rem',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                border: 'none',
-                margin: 'var(--space-1) var(--space-4)',
-                borderRadius: 'var(--radius-xl)',
-                fontWeight: '600',
-                background: activeTab === item.id ?
-                  'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' :
-                  'transparent',
-                color: activeTab === item.id ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
-                animationDelay: `${index * 0.05}s`,
-                boxShadow: activeTab === item.id ? 'var(--shadow-md)' : 'none'
-              }}
+              className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+              title={item.label}
             >
-              <span style={{ fontSize: '1.375rem', minWidth: '24px' }}>{item.icon}</span>
-              {sidebarOpen && (
-                <div>
-                  <div className="font-semibold">{item.label}</div>
-                  <div className="text-xs opacity-75">{item.desc}</div>
-                </div>
-              )}
+              <span className="nav-icon">{item.icon}</span>
+              {sidebarOpen && <span>{item.label}</span>}
             </button>
           ))}
         </nav>
 
-        {/* Professional User Section */}
-        <div style={{
-          padding: 'var(--space-6)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
+        <div className="user-section" style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           {user ? (
-            <div className="animate-scale-pro">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {sidebarOpen && (
-                <div style={{
-                  marginBottom: 'var(--space-4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-4)'
-                }}>
-                  <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, var(--primary-400) 0%, var(--primary-600) 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    fontWeight: '700',
-                    fontSize: '1.125rem',
-                    boxShadow: 'var(--shadow-lg)'
-                  }}>
-                    {user.name.charAt(0).toUpperCase()}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyCenter: 'center', fontWeight: 'bold' }}>
+                    {user.name.charAt(0)}
                   </div>
-                  <div>
-                    <p className="text-white font-semibold text-sm m-0">
-                      {user.name}
-                    </p>
-                    <p className="text-xs m-0" style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
-                      {user.email}
-                    </p>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{user.email}</div>
                   </div>
                 </div>
               )}
-              <button
-                onClick={handleLogout}
-                className="btn-secondary-pro"
-                style={{ width: '100%', fontSize: '0.875rem' }}
-              >
-                {sidebarOpen ? '🚪 Sign Out' : '↗'}
+              <button onClick={handleLogout} className="nav-item" style={{ padding: '8px 12px', fontSize: '13px' }}>
+                <span className="nav-icon">🚪</span>
+                {sidebarOpen && <span>Sign Out</span>}
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="btn-primary-pro"
-              style={{ width: '100%', fontSize: '0.875rem' }}
-            >
-              {sidebarOpen ? '✨ Sign In / Register' : '👤'}
+            <button onClick={() => setShowAuthModal(true)} className="btn-primary" style={{ padding: '10px', fontSize: '13px' }}>
+              {sidebarOpen ? 'Sign In' : '👤'}
             </button>
           )}
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content Area */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        margin: 'var(--space-4) var(--space-4) var(--space-4) 0'
-      }}>
-        {/* Professional Header */}
-        <header className="glass-card-white-pro animate-slide-in-pro" style={{
-          padding: 'var(--space-6) var(--space-8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 'var(--space-4)'
-        }}>
-          <div>
-            <h2 className="gradient-text-pro text-3xl font-black m-0">
-              {sidebarItems.find(item => item.id === activeTab)?.icon} {sidebarItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
-            </h2>
-            <p className="text-gray-600 font-medium text-base m-0 mt-1">
-              {sidebarItems.find(item => item.id === activeTab)?.desc || 'MHT-CET 2025 Professional Platform'}
-            </p>
+      {/* Main Content */}
+      <main className="main-content">
+        <header className="header-top">
+          <div className="page-title">
+            <h1>{sidebarItems.find(i => i.id === activeTab)?.label}</h1>
+            <p>{sidebarItems.find(i => i.id === activeTab)?.desc}</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-            <div className="badge-primary">
-              🎓 MHT-CET 2025
-            </div>
-            {user && (
-              <div className="status-indicator status-online badge-success">
-                Online
-              </div>
-            )}
+          <div
+            className="flex items-center justify-between gap-3 border rounded-xl px-4 py-2 shadow-sm bg-white"
+          >
+            <span className="px-3 py-1 text-sm font-semibold rounded-lg bg-indigo-100 text-indigo-700">
+              MHT-CET 2025
+            </span>
+
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle sidebar"
+              className="w-9 h-9 flex items-center justify-center border rounded-lg transition hover:bg-gray-100 active:scale-95"
+            >
+              {sidebarOpen ? '◂' : '▸'}
+            </button>
           </div>
         </header>
 
-        {/* Professional Content Area */}
-        <main className="glass-card-white-pro animate-slide-in-pro" style={{
-          flex: 1,
-          padding: 'var(--space-8)',
-          overflow: 'auto'
-        }}>
-          {/* Professional Dashboard */}
+        <div className="content-scroll">
           {activeTab === 'dashboard' && (
-            <div>
-              <div className="text-center mb-12 animate-fade-in-pro">
-                <h3 className="gradient-text-pro text-6xl font-black m-0 mb-6">
-                  Welcome to MHT-CET Pro ✨
-                </h3>
-                <p className="text-gray-600 text-xl font-medium m-0" style={{ maxWidth: '700px', margin: '0 auto' }}>
-                  🚀 Your ultimate platform for Maharashtra engineering college admissions with AI-powered predictions and smart insights
-                </p>
-              </div>
-
-              <div className="grid-pro grid-auto-fit mb-12">
+            <div className="fade-in">
+              <div className="stats-grid">
                 {[
-                  {
-                    icon: '🎯',
-                    title: 'AI-Powered Predictions',
-                    desc: 'Get accurate college predictions using advanced ML algorithms and historical data analysis',
-                    gradient: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
-                    delay: '0s'
-                  },
-                  {
-                    icon: '🏛️',
-                    title: 'Premium College Database',
-                    desc: 'Comprehensive information about Maharashtra\'s top engineering institutions with real-time updates',
-                    gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                    delay: '0.1s'
-                  },
-                  {
-                    icon: '🤖',
-                    title: 'Smart AI Assistant',
-                    desc: 'Get instant answers to your admission queries with our intelligent ChatGPT-style assistant',
-                    gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                    delay: '0.2s'
-                  },
-                  {
-                    icon: '📊',
-                    title: 'Advanced Analytics',
-                    desc: 'Detailed placement statistics and career outcome data for informed decision making',
-                    gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-                    delay: '0.3s'
-                  }
-                ].map((feature, index) => (
-                  <div
-                    key={index}
-                    className="card-pro animate-slide-in-pro"
-                    style={{
-                      background: feature.gradient,
-                      color: '#ffffff',
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      animationDelay: feature.delay,
-                      border: 'none'
-                    }}
-                  >
-                    <div className="card-body-pro">
-                      <div className="text-6xl mb-6 animate-bounce">
-                        {feature.icon}
-                      </div>
-                      <h4 className="text-2xl font-bold mb-4">
-                        {feature.title}
-                      </h4>
-                      <p className="text-base font-medium opacity-90 leading-relaxed">
-                        {feature.desc}
-                      </p>
+                  { label: 'Engineering Colleges', value: '328+', icon: '🏛️', color: '#eff6ff', textColor: '#3b82f6' },
+                  { label: 'Prediction Accuracy', value: '98.4%', icon: '🎯', color: '#ecfdf5', textColor: '#10b981' },
+                  { label: 'Courses Analyzed', value: '54', icon: '📚', color: '#fef3c7', textColor: '#d97706' },
+                  { label: 'Average Package', value: '₹8.5 LPA', icon: '💰', color: '#fdf2f8', textColor: '#db2777' }
+                ].map((stat, i) => (
+                  <div key={i} className="stat-card">
+                    <div className="stat-info">
+                      <h3>{stat.label}</h3>
+                      <div className="stat-value">{stat.value}</div>
                     </div>
+                    <div className="stat-icon" style={{ background: stat.color }}>{stat.icon}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="card-pro animate-scale-pro">
-                <div className="card-header-pro text-center">
-                  <h4 className="gradient-text-pro text-4xl font-black m-0">
-                    🏆 Platform Statistics
-                  </h4>
-                </div>
-                <div className="card-body-pro">
-                  <div className="grid-pro grid-cols-4">
-                    {[
-                      { value: '150+', label: 'Engineering Colleges', color: 'var(--primary-500)', icon: '🏛️' },
-                      { value: '98%', label: 'Prediction Accuracy', color: 'var(--success-500)', icon: '🎯' },
-                      { value: '50+', label: 'Courses Available', color: '#f093fb', icon: '📚' },
-                      { value: '₹45L', label: 'Highest Package', color: '#4facfe', icon: '💰' }
-                    ].map((stat, index) => (
-                      <div
-                        key={index}
-                        className="card-pro animate-scale-pro"
-                        style={{
-                          textAlign: 'center',
-                          background: `linear-gradient(135deg, ${stat.color}10 0%, ${stat.color}20 100%)`,
-                          border: `2px solid ${stat.color}30`,
-                          animationDelay: `${index * 0.1}s`
-                        }}
-                      >
-                        <div className="card-body-pro">
-                          <div className="text-3xl mb-2">{stat.icon}</div>
-                          <div className="text-4xl font-black mb-2" style={{ color: stat.color }}>
-                            {stat.value}
-                          </div>
-                          <div className="text-gray-600 font-semibold text-sm">
-                            {stat.label}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="form-card mt-8" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', color: 'white', border: 'none' }}>
+                <h2 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '16px' }}>Ready for 2025 CAP Rounds?</h2>
+                <p style={{ color: '#94a3b8', fontSize: '18px', maxWidth: '600px', marginBottom: '32px' }}>
+                  Our AI engine has been updated with the latest 2024 cutoff data to provide the most accurate predictions for the upcoming 2025 admission cycle.
+                </p>
+                <button className="btn-primary" onClick={() => setActiveTab('predictor')} style={{ width: 'auto', padding: '16px 40px' }}>
+                  Launch AI Predictor ✨
+                </button>
               </div>
             </div>
           )}
 
           {/* Professional AI Predictor */}
           {activeTab === 'predictor' && (
-            <div className="animate-fade-in-pro">
-              <div className="text-center mb-12">
-                <h3 className="gradient-text-pro text-5xl font-black mb-4">
-                  🎯 AI-Powered College Predictor
-                </h3>
-                <p className="text-gray-600 text-lg font-medium">
-                  Get personalized college recommendations based on your MHT-CET performance
-                </p>
-              </div>
+            <div className="predictor-container fade-in">
+              <div className="form-card">
+                <div style={{ marginBottom: '24px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 700 }}>Algorithm Parameters</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Enter your MHT-CET details for accurate prediction.</p>
+                </div>
 
-              <div className="grid-pro grid-cols-2" style={{ alignItems: 'start' }}>
-                {/* Professional Prediction Form */}
-                <div className="card-pro animate-slide-in-pro">
-                  <div className="card-header-pro">
-                    <h4 className="gradient-text-pro text-2xl font-bold m-0">
-                      📝 Enter Your Details
-                    </h4>
-                  </div>
+                <div className="form-group">
+                  <label className="form-label">Percentile Score</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    placeholder="e.g. 98.45"
+                    value={formData.percentile}
+                    onChange={(e) => setFormData({ ...formData, percentile: e.target.value })}
+                  />
+                </div>
 
-                  <div className="card-body-pro">
-                    <form onSubmit={handlePrediction} className="grid-pro" style={{ gap: 'var(--space-6)' }}>
-                      <div>
-                        <label className="block text-gray-700 font-semibold mb-2">
-                          🎯 MHT-CET Percentile
-                        </label>
+                <div className="form-group">
+                  <label className="form-label">Candidate Category</label>
+                  <select
+                    className="input-field"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  >
+                    {['General', 'OBC', 'SC', 'ST', 'VJ/DT', 'NT-A', 'NT-B', 'NT-C', 'NT-D', 'SBC', 'EWS'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Target Courses</label>
+                  <div className="multi-select-container">
+                    {courseOptions.map((course) => (
+                      <label key={course} className="checkbox-item">
                         <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="Enter your percentile (0-100)"
-                          value={formData.percentile}
-                          onChange={(e) => setFormData({ ...formData, percentile: e.target.value })}
-                          className="input-pro focus-ring-pro"
-                          required
+                          type="checkbox"
+                          checked={formData.courses.includes(course)}
+                          onChange={() => {
+                            const newCourses = formData.courses.includes(course)
+                              ? formData.courses.filter(c => c !== course)
+                              : [...formData.courses, course];
+                            setFormData({ ...formData, courses: newCourses });
+                          }}
                         />
-                      </div>
-
-                      <div>
-                        <label className="block text-gray-700 font-semibold mb-2">
-                          👥 Category
-                        </label>
-                        <select
-                          value={formData.category}
-                          onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                          className="input-pro focus-ring-pro"
-                        >
-                          <option value="General">General Open (GOPENS)</option>
-                          <option value="OBC">Other Backward Class (OBC)</option>
-                          <option value="SC">Scheduled Caste (SC)</option>
-                          <option value="ST">Scheduled Tribe (ST)</option>
-                          <option value="EWS">Economically Weaker Section (EWS)</option>
-                          <option value="VJNT">Vimukta Jati & Nomadic Tribes (VJNT)</option>
-                          <option value="NT1">Nomadic Tribe 1 (NT1)</option>
-                          <option value="NT2">Nomadic Tribe 2 (NT2)</option>
-                          <option value="NT3">Nomadic Tribe 3 (NT3)</option>
-                          <option value="SEBC">Socially & Educationally Backward Class (SEBC)</option>
-                          <option value="TFWS">Tuition Fee Waiver Scheme (TFWS)</option>
-                          <option value="Ladies_General">Ladies General Open</option>
-                          <option value="Ladies_OBC">Ladies OBC</option>
-                          <option value="Ladies_SC">Ladies SC</option>
-                          <option value="Ladies_ST">Ladies ST</option>
-                          <option value="Ladies_VJNT">Ladies VJNT</option>
-                          <option value="Ladies_NT1">Ladies NT1</option>
-                          <option value="Ladies_NT2">Ladies NT2</option>
-                          <option value="Ladies_NT3">Ladies NT3</option>
-                          <option value="Ladies_SEBC">Ladies SEBC</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-gray-700 font-semibold mb-2">
-                          🏛️ University Type
-                        </label>
-                        <select
-                          value={formData.universityType || 'Home University'}
-                          onChange={(e) => setFormData({ ...formData, universityType: e.target.value })}
-                          className="input-pro focus-ring-pro"
-                        >
-                          <option value="Home University">Home University</option>
-                          <option value="Other Than Home University">Other Than Home University</option>
-                        </select>
-                        <div className="mt-1 text-xs text-gray-500">
-                          Home University: For students from the same university region
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-gray-700 font-semibold mb-2">
-                          👩‍🎓 Seat Preferences
-                        </label>
-                        <div className="space-y-3">
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={formData.includeLadies || false}
-                              onChange={(e) => setFormData({ ...formData, includeLadies: e.target.checked })}
-                              className="w-4 h-4 text-pink-600 bg-gray-100 border-gray-300 rounded focus:ring-pink-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                              👩‍🎓 Include Ladies Quota Seats
-                            </span>
-                          </label>
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={formData.includeTFWS || false}
-                              onChange={(e) => setFormData({ ...formData, includeTFWS: e.target.checked })}
-                              className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                              💰 Include TFWS (Tuition Fee Waiver Scheme)
-                            </span>
-                          </label>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500">
-                          TFWS: Free tuition for economically weaker sections
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-gray-700 font-semibold mb-2">
-                          🎓 Preferred Courses (Select Multiple)
-                        </label>
-                        <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
-                          {[
-                            'Computer Engineering',
-                            'Information Technology',
-                            'Electronics & Telecommunication',
-                            'Mechanical Engineering',
-                            'Civil Engineering',
-                            'Electrical Engineering',
-                            'Chemical Engineering',
-                            'Automobile Engineering',
-                            'Instrumentation Engineering',
-                            'Production Engineering',
-                            'Textile Engineering',
-                            'Mining Engineering'
-                          ].map((course) => (
-                            <label key={course} className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                              <input
-                                type="checkbox"
-                                checked={formData.courses.includes(course)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData({
-                                      ...formData,
-                                      courses: [...formData.courses, course]
-                                    });
-                                  } else {
-                                    setFormData({
-                                      ...formData,
-                                      courses: formData.courses.filter(c => c !== course)
-                                    });
-                                  }
-                                }}
-                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <span className="text-sm font-medium text-gray-700">{course}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <div className="mt-2 text-sm text-gray-600">
-                          Selected: {formData.courses.length} course{formData.courses.length !== 1 ? 's' : ''}
-                          {formData.courses.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {formData.courses.map((course) => (
-                                <span key={course} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  {course}
-                                  <button
-                                    type="button"
-                                    onClick={() => setFormData({
-                                      ...formData,
-                                      courses: formData.courses.filter(c => c !== course)
-                                    })}
-                                    className="ml-1 text-blue-600 hover:text-blue-800"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={loading || formData.courses.length === 0}
-                        className={`btn-primary-pro focus-ring-pro ${(loading || formData.courses.length === 0) ? 'opacity-50' : ''}`}
-                        style={{
-                          width: '100%',
-                          padding: 'var(--space-5)',
-                          fontSize: '1.125rem',
-                          fontWeight: '700',
-                          marginTop: 'var(--space-4)'
-                        }}
-                      >
-                        {loading ? '⏳ Generating Predictions...' :
-                          formData.courses.length === 0 ? '⚠️ Select at least one course' :
-                            `🚀 Get Predictions for ${formData.courses.length} Course${formData.courses.length !== 1 ? 's' : ''}`}
-                      </button>
-                    </form>
+                        <span style={{ fontSize: '14px' }}>{course}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
 
-                {/* Professional Info Panel */}
-                <div className="animate-slide-in-pro" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-                  <div className="card-pro" style={{
-                    background: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)',
-                    color: '#ffffff',
-                    border: 'none'
-                  }}>
-                    <div className="card-body-pro">
-                      <h5 className="text-xl font-bold mb-4">
-                        🤖 How Our AI Works
-                      </h5>
-                      <ul className="text-base font-medium leading-relaxed" style={{ paddingLeft: 'var(--space-6)' }}>
-                        <li>Analyzes 5+ years of historical cutoff data</li>
-                        <li>Considers category-wise seat availability</li>
-                        <li>Factors in college ranking and popularity</li>
-                        <li>Uses machine learning for accurate predictions</li>
-                      </ul>
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="form-label">University Type</label>
+                    <select
+                      className="input-field"
+                      value={formData.universityType}
+                      onChange={(e) => setFormData({ ...formData, universityType: e.target.value })}
+                    >
+                      <option value="Home University">Home University (HU)</option>
+                      <option value="Other than Home University">Other than HU (OHU)</option>
+                    </select>
                   </div>
+                  <div className="form-group">
+                    <label className="form-label">Preferred Location</label>
+                    <select
+                      className="input-field"
+                      value={formData.city || 'All Cities'}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    >
+                      {uniqueCities.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                  <div className="card-pro" style={{
-                    background: 'linear-gradient(135deg, var(--success-500) 0%, #38f9d7 100%)',
-                    color: '#ffffff',
-                    border: 'none'
-                  }}>
-                    <div className="card-body-pro">
-                      <h5 className="text-xl font-bold mb-4">
-                        ✨ What You'll Get
-                      </h5>
-                      <ul className="text-base font-medium leading-relaxed" style={{ paddingLeft: 'var(--space-6)' }}>
-                        <li>Multi-course predictions in one go</li>
-                        <li>Course-wise breakdown and filtering</li>
-                        <li>Admission probability analysis</li>
-                        <li>Detailed placement statistics</li>
-                        <li>Downloadable prediction report</li>
-                      </ul>
-                    </div>
-                  </div>
+                <div style={{ display: 'flex', gap: '20px', marginBottom: '24px' }}>
+                  <label className="checkbox-item">
+                    <input type="checkbox" checked={formData.includeLadies} onChange={(e) => setFormData({ ...formData, includeLadies: e.target.checked })} />
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Ladies Quota</span>
+                  </label>
+                  <label className="checkbox-item">
+                    <input type="checkbox" checked={formData.includeTFWS} onChange={(e) => setFormData({ ...formData, includeTFWS: e.target.checked })} />
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>TFWS Benefits</span>
+                  </label>
+                </div>
 
-                  <div className="card-pro" style={{
-                    background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                    color: '#ffffff',
-                    border: 'none'
-                  }}>
-                    <div className="card-body-pro text-center">
-                      <h5 className="text-xl font-bold mb-4">
-                        📊 Success Rate
-                      </h5>
-                      <div className="text-6xl font-black mb-2">98%</div>
-                      <p className="text-base font-medium opacity-90">Prediction Accuracy</p>
-                    </div>
-                  </div>
+                <button
+                  className="btn-primary"
+                  onClick={handlePrediction}
+                  disabled={loading || !formData.percentile || formData.courses.length === 0}
+                >
+                  {loading ? 'Analyzing Data...' : 'Generate Prediction Report 🚀'}
+                </button>
+              </div>
+
+              <div className="sidebar-info" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div className="form-card" style={{ padding: '24px', background: '#f1f5f9', border: 'none' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>Why MHT-CET Pro?</h3>
+                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {['Real-time 2024 Cutoff Data', 'Smarter Probability Scoring', 'AI-Driven Career Insights', 'Seat-type Analysis (HU/OHU)'].map((text, i) => (
+                      <li key={i} style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569' }}>
+                        <span style={{ color: '#10b981' }}>✓</span> {text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="form-card" style={{ padding: '24px', background: 'var(--primary)', color: 'white', border: 'none' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>🤖</div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Need Help?</h3>
+                  <p style={{ fontSize: '13px', color: '#bfdbfe', marginBottom: '16px' }}>Ask our AI assistant about CAP round procedures or college life.</p>
+                  <button onClick={() => setActiveTab('chat')} style={{ background: 'white', color: 'var(--primary)', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>Chat Now</button>
                 </div>
               </div>
             </div>
           )}
-
           {/* Colleges Tab */}
           {activeTab === 'colleges' && (
             <div className="animate-slide-bottom">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
-                  <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: 0 }}>
+                  <h3 className="gradient-text-pro" style={{ fontSize: '2.5rem', fontWeight: '800', margin: 0 }}>
                     🏛️ Engineering Colleges
                   </h3>
                   <p style={{ color: '#64748b', fontSize: '1.1rem', margin: '0.5rem 0 0 0' }}>
@@ -1635,9 +1350,9 @@ function App() {
                       <div className="grid-pro grid-cols-4 mb-8">
                         {[
                           { icon: '💰', title: 'Highest Package', value: '₹45 LPA', desc: 'Microsoft, Google', color: 'linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%)' },
-                          { icon: '📊', title: 'Average Package', value: '₹8.5 LPA', desc: 'Top Colleges', color: 'linear-gradient(135deg, var(--success-500) 0%, #38f9d7 100%)' },
-                          { icon: '🎯', title: 'Placement Rate', value: '95%', desc: 'Overall Success', color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-                          { icon: '🏢', title: 'Top Recruiters', value: '500+', desc: 'Companies', color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }
+                          { icon: '📊', title: 'Average Package', value: '₹8.5 LPA', desc: 'Top Colleges', color: 'linear-gradient(135deg, var(--success-600) 0%, var(--success-500) 100%)' },
+                          { icon: '🎯', title: 'Placement Rate', value: '95%', desc: 'Overall Success', color: 'linear-gradient(135deg, #db2777 0%, #be185d 100%)' },
+                          { icon: '🏢', title: 'Top Recruiters', value: '500+', desc: 'Companies', color: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)' }
                         ].map((stat, index) => (
                           <div key={index} className="card-pro animate-slide-in-pro" style={{
                             background: stat.color,
@@ -1768,7 +1483,7 @@ function App() {
               ) : predictions.length === 0 && predictionHistory.length > 0 ? (
                 <div>
                   <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
-                    <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
+                    <h3 className="gradient-text-pro" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
                       📚 Your Prediction History
                     </h3>
                     <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
@@ -1825,7 +1540,7 @@ function App() {
                             </div>
                           </div>
 
-                          <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                          <div className="grid-pro grid-cols-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
                               <div className="text-xs text-gray-500">Percentile</div>
@@ -1837,6 +1552,10 @@ function App() {
                             <div className="text-center">
                               <div className="text-2xl font-bold text-gray-700">{historyItem.predictions?.length || 0}</div>
                               <div className="text-xs text-gray-500">Total Colleges</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-gray-800">{historyItem.inputData?.city || 'All Cities'}</div>
+                              <div className="text-xs text-gray-500">Selected City</div>
                             </div>
                           </div>
 
@@ -1874,7 +1593,7 @@ function App() {
               ) : (
                 <div>
                   <div style={{ marginBottom: '3rem', textAlign: 'center', position: 'relative' }}>
-                    <h3 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
+                    <h3 className="gradient-text-pro" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
                       📊 Your Prediction Results
                     </h3>
                     <p className="text-gray-600 font-medium text-lg m-0">
@@ -1946,7 +1665,7 @@ function App() {
                                 </div>
                               </div>
 
-                              <div className="grid-pro grid-cols-3" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+                              <div className="grid-pro grid-cols-4" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
                                 <div className="text-center">
                                   <div className="text-2xl font-bold text-primary-600">{historyItem.inputData.percentile}%</div>
                                   <div className="text-xs text-gray-500">Percentile</div>
@@ -1958,6 +1677,10 @@ function App() {
                                 <div className="text-center">
                                   <div className="text-2xl font-bold text-gray-700">{historyItem.predictions?.length || 0}</div>
                                   <div className="text-xs text-gray-500">Total Colleges</div>
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-lg font-bold text-gray-800">{historyItem.inputData?.city || 'All Cities'}</div>
+                                  <div className="text-xs text-gray-500">Selected City</div>
                                 </div>
                               </div>
 
@@ -2100,57 +1823,30 @@ function App() {
                         </button>
                       </div>
 
-                      {/* Predictions List */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.2)', border: '1px solid rgba(255, 255, 255, 0.4)', borderRadius: '10px', display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr', gap: '1rem', fontWeight: '800', fontSize: '0.8rem', color: '#4b5563', textTransform: 'uppercase', textAlign: 'center' }}>
+                      <div className="results-grid">
+                        <div className="result-row" style={{ background: '#f8fafc', fontWeight: 700, border: 'none', cursor: 'default', color: 'var(--text-muted)', fontSize: '13px', textTransform: 'uppercase' }}>
                           <div>College Name</div>
                           <div>City</div>
                           <div>Branch</div>
-                          <div>Seat Type</div>
-                          <div>Closing %</div>
-                          <div>Chance</div>
+                          <div style={{ textAlign: 'center' }}>Type</div>
+                          <div style={{ textAlign: 'center' }}>Cutoff</div>
+                          <div style={{ textAlign: 'center' }}>Status</div>
                         </div>
                         {predictions
                           .filter(prediction => selectedCourseFilter === 'all' || prediction.course === selectedCourseFilter)
                           .map((prediction, index) => (
-                            <div key={index} className={`card-pro animate-slide-bottom ${prediction.riskLabel.toLowerCase()}`} style={{
-                              padding: '1.25rem',
-                              borderRadius: '15px',
-                              animationDelay: `${index * 0.05}s`,
-                              display: 'grid',
-                              gridTemplateColumns: '2fr 1fr 1.5fr 1fr 1fr 1fr',
-                              gap: '1rem',
-                              alignItems: 'center',
-                              textAlign: 'center',
-                              background: prediction.riskLabel === 'Probable' ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
-                              borderLeft: `5px solid ${prediction.riskLabel === 'Probable' ? '#10b981' : '#f59e0b'}`
-                            }}>
-                              <div style={{ textAlign: 'left', fontWeight: '700', color: '#1f2937', fontSize: '1rem' }}>
-                                {prediction.name}
-                              </div>
-                              <div style={{ color: '#4b5563', fontWeight: '500' }}>
-                                {prediction.city || prediction.location.split(',')[0]}
-                              </div>
-                              <div style={{ color: '#4b5563', fontSize: '0.9rem', fontWeight: '600' }}>
-                                {prediction.branch}
-                              </div>
-                              <div>
-                                <span style={{
-                                  background: prediction.seatTypeLabel === 'TFWS' ? '#6366f1' : prediction.seatTypeLabel === 'Ladies' ? '#ec4899' : '#64748b',
-                                  color: 'white',
-                                  padding: '0.3rem 0.6rem',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: '800'
-                                }}>
+                            <div key={index} className="result-row fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
+                              <div className="col-name">{prediction.name}</div>
+                              <div className="col-city">{prediction.city || prediction.location.split(',')[0]}</div>
+                              <div className="col-branch">{prediction.branch}</div>
+                              <div style={{ textAlign: 'center' }}>
+                                <span className={`badge ${prediction.seatTypeLabel === 'TFWS' ? 'badge-indigo' : prediction.seatTypeLabel === 'Ladies' ? 'badge-pink' : 'badge-success'}`}>
                                   {prediction.seatTypeLabel}
                                 </span>
                               </div>
-                              <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#111827' }}>
-                                {prediction.cutoffForCategory}%
-                              </div>
-                              <div>
-                                <span className={`badge-pro ${prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.7rem', width: '100%', justifyContent: 'center' }}>
+                              <div className="col-cutoff">{prediction.cutoffForCategory}%</div>
+                              <div style={{ textAlign: 'center' }}>
+                                <span className={`badge ${prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`}>
                                   {prediction.riskLabel}
                                 </span>
                               </div>
@@ -2723,278 +2419,164 @@ function App() {
               </div>
             </div>
           )}
-        </main>
-      </div>
 
-      {/* College Modal */}
+          {/* Admin Dashboard Tab */}
+          {activeTab === 'adminUser' && user?.role === 'admin' && (
+            <div className="animate-fade-in-pro">
+              <div className="glass-card-pro animate-slide-top" style={{
+                padding: '2rem',
+                marginBottom: '2rem',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                color: 'white'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ fontSize: '2.5rem' }}>👑</div>
+                  <div>
+                    <h2 style={{ fontSize: '2rem', fontWeight: '800', margin: 0 }}>Admin Dashboard</h2>
+                    <p style={{ color: '#94a3b8', margin: '0.5rem 0 0 0' }}>Manage users and system settings</p>
+                  </div>
+                  <button onClick={fetchAdminUsers} className="btn-secondary" style={{ marginLeft: 'auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
+                    🔄 Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Registered Users ({adminUsers.length})</h3>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <thead style={{ background: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700' }}>
+                      <tr>
+                        <th style={{ padding: '1rem', textAlign: 'left' }}>User</th>
+                        <th style={{ padding: '1rem', textAlign: 'left' }}>Role</th>
+                        <th style={{ padding: '1rem', textAlign: 'left' }}>City</th>
+                        <th style={{ padding: '1rem', textAlign: 'left' }}>Category</th>
+                        <th style={{ padding: '1rem', textAlign: 'left' }}>Joined</th>
+                        <th style={{ padding: '1rem', textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminUsers.map((u, i) => (
+                        <tr key={u._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '1rem' }}>
+                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{u.name}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{u.email}</div>
+                          </td>
+                          <td style={{ padding: '1rem' }}>
+                            <span className={`badge ${u.role === 'admin' ? 'badge-pink' : 'badge-indigo'}`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td style={{ padding: '1rem', color: '#475569' }}>{u.profile?.city || '-'}</td>
+                          <td style={{ padding: '1rem', color: '#475569' }}>{u.profile?.category || 'General'}</td>
+                          <td style={{ padding: '1rem', color: '#475569' }}>
+                            {new Date(u.createdAt).toLocaleDateString()}
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'center' }}>
+                            {u.role !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(u._id)}
+                                style={{
+                                  background: '#fee2e2',
+                                  color: '#ef4444',
+                                  border: 'none',
+                                  padding: '0.5rem',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.2s',
+                                  fontSize: '1.2rem'
+                                }}
+                                title="Delete User"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {adminUsers.length === 0 && (
+                        <tr>
+                          <td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                            No users found. Try refreshing.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div> {/* End content-scroll */}
+      </main>
+
+      {/* Modals Container */}
       {showCollegeModal && selectedCollege && (
-        <div className="animate-zoom-in" style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '2rem',
-          backdropFilter: 'blur(10px)', overflowY: 'auto'
-        }}>
-          <div className="glass-card-white animate-bounce-in" style={{
-            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%)',
-            padding: '3rem', borderRadius: '25px', width: '100%', maxWidth: '900px',
-            position: 'relative', border: '2px solid rgba(102, 126, 234, 0.2)',
-            maxHeight: '90vh', overflowY: 'auto'
-          }}>
-            <button onClick={() => setShowCollegeModal(false)} className="animate-pulse" style={{
-              position: 'absolute', top: '1.5rem', right: '1.5rem', color: '#64748b',
-              backgroundColor: 'rgba(100, 116, 139, 0.1)', border: 'none', fontSize: '1.5rem',
-              cursor: 'pointer', borderRadius: '50%', width: '40px', height: '40px', zIndex: 10
-            }}>
-              ×
-            </button>
-
-            <div style={{ marginBottom: '2rem' }}>
-              <h2 className="gradient-text-fire" style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 1rem 0' }}>
-                {selectedCollege.name}
-              </h2>
-              <p style={{ color: '#64748b', fontSize: '1.1rem', margin: 0 }}>
-                📍 {selectedCollege.location} • {selectedCollege.type}
-              </p>
+        <div className="modal-overlay" onClick={() => setShowCollegeModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 800 }}>{selectedCollege.name}</h2>
+              <button onClick={() => setShowCollegeModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
             </div>
 
-            {/* Quick Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-              <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #667eea15 0%, #764ba225 100%)' }}>
-                <div style={{ color: '#667eea', fontSize: '0.875rem', fontWeight: '600' }}>CUTOFF (General)</div>
-                <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{selectedCollege.cutoff?.general || 'N/A'}%</div>
-              </div>
-              <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #10b98115 0%, #05966925 100%)' }}>
-                <div style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: '600' }}>ANNUAL FEES</div>
-                <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{selectedCollege.fees || 'N/A'}</div>
-              </div>
-              <div className="glass-card" style={{ padding: '1.5rem', borderRadius: '15px', textAlign: 'center', background: 'linear-gradient(135deg, #f093fb15 0%, #f5576c25 100%)' }}>
-                <div style={{ color: '#f5576c', fontSize: '0.875rem', fontWeight: '600' }}>AVG PACKAGE</div>
-                <div style={{ color: '#1f2937', fontSize: '2rem', fontWeight: '900' }}>{selectedCollege.placements?.averagePackage || 'N/A'}</div>
-              </div>
-            </div>
-
-            {/* Courses */}
-            <div className="glass-card" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem' }}>
-              <h4 className="gradient-text" style={{ fontSize: '1.5rem', fontWeight: '700', margin: '0 0 1rem 0' }}>
-                🎓 Available Courses
-              </h4>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                {(selectedCollege.courses || []).map((course, index) => (
-                  <span key={index} className="glass-card" style={{
-                    padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.875rem',
-                    background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
-                    color: '#374151', fontWeight: '600'
-                  }}>
-                    {course}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Placements */}
-            <div className="glass-card" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem', background: 'linear-gradient(135deg, #43e97b15 0%, #38f9d725 100%)' }}>
-              <h4 className="gradient-text" style={{ fontSize: '1.5rem', fontWeight: '700', margin: '0 0 1.5rem 0' }}>
-                💼 Placement Statistics
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '600' }}>Average Package</div>
-                  <div style={{ color: '#1f2937', fontSize: '1.5rem', fontWeight: '900', margin: '0.5rem 0' }}>
-                    {selectedCollege.placements?.averagePackage || 'N/A'}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '600' }}>Highest Package</div>
-                  <div style={{ color: '#1f2937', fontSize: '1.5rem', fontWeight: '900', margin: '0.5rem 0' }}>
-                    {selectedCollege.placements?.highestPackage || 'N/A'}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '600' }}>Placement Rate</div>
-                  <div style={{ color: '#1f2937', fontSize: '1.5rem', fontWeight: '900', margin: '0.5rem 0' }}>
-                    {selectedCollege.placements?.placementRate || 'N/A'}
-                  </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+              <div className="stat-card" style={{ padding: '16px' }}>
+                <div className="stat-info">
+                  <h3>General Cutoff</h3>
+                  <div className="stat-value" style={{ fontSize: '20px' }}>{selectedCollege.cutoff?.general}%</div>
                 </div>
               </div>
-
-              {selectedCollege.placements?.topRecruiters && (
-                <div style={{ marginTop: '1.5rem' }}>
-                  <div style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.75rem' }}>
-                    Top Recruiters
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    {selectedCollege.placements.topRecruiters.slice(0, 8).map((recruiter, index) => (
-                      <span key={index} style={{
-                        padding: '0.5rem 1rem', borderRadius: '10px', fontSize: '0.8rem',
-                        background: '#ffffff', color: '#374151', fontWeight: '600',
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        {recruiter}
-                      </span>
-                    ))}
-                  </div>
+              <div className="stat-card" style={{ padding: '16px' }}>
+                <div className="stat-info">
+                  <h3>Avg Package</h3>
+                  <div className="stat-value" style={{ fontSize: '20px' }}>{selectedCollege.placements?.averagePackage}</div>
                 </div>
-              )}
-            </div>
-
-            {/* Cutoff Details */}
-            <div className="glass-card" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem' }}>
-              <h4 className="gradient-text" style={{ fontSize: '1.5rem', fontWeight: '700', margin: '0 0 1.5rem 0' }}>
-                📊 Category-wise Cutoffs
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-                {selectedCollege.cutoff && Object.entries(selectedCollege.cutoff).map(([category, cutoff]) => (
-                  <div key={category} style={{
-                    padding: '1rem', borderRadius: '12px', textAlign: 'center',
-                    background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)'
-                  }}>
-                    <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
-                      {category}
-                    </div>
-                    <div style={{ color: '#1f2937', fontSize: '1.5rem', fontWeight: '900', margin: '0.25rem 0' }}>
-                      {cutoff}%
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button onClick={() => downloadPDF(selectedCollege)} className="btn-modern animate-pulse-glow" style={{
-                padding: '1rem 2rem', fontSize: '1rem', fontWeight: '700'
-              }}>
-                📄 Download College Report
-              </button>
-              <button onClick={() => setShowCollegeModal(false)} className="btn-gradient-1" style={{
-                padding: '1rem 2rem', fontSize: '1rem', fontWeight: '700', border: 'none',
-                borderRadius: '15px', cursor: 'pointer', color: '#ffffff'
-              }}>
-                ✓ Close
-              </button>
+            <div className="form-group">
+              <label className="form-label">Available Branches</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {selectedCollege.courses?.map(c => <span key={c} className="badge badge-indigo">{c}</span>)}
+              </div>
             </div>
+
+            <button className="btn-primary" onClick={() => downloadPDF(selectedCollege)} style={{ marginTop: '24px' }}>Download Detailed Report</button>
           </div>
         </div>
       )}
 
-
-
-      {/* Professional Auth Modal */}
       {showAuthModal && (
-        <div className="animate-fade-in-pro" style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 50,
-          padding: 'var(--space-8)',
-          backdropFilter: 'blur(12px)'
-        }}>
-          <div className="glass-card-white-pro animate-scale-pro" style={{
-            padding: 'var(--space-12)',
-            width: '100%',
-            maxWidth: '480px',
-            position: 'relative'
-          }}>
-            <button
-              onClick={() => setShowAuthModal(false)}
-              className="btn-secondary-pro"
-              style={{
-                position: 'absolute',
-                top: 'var(--space-6)',
-                right: 'var(--space-6)',
-                padding: 'var(--space-3)',
-                fontSize: '1.25rem',
-                borderRadius: '50%',
-                width: '44px',
-                height: '44px'
-              }}
-            >
-              ×
-            </button>
-
-            <div className="text-center mb-8">
-              <h2 className="gradient-text-pro text-3xl font-black mb-2">
-                {authMode === 'login' ? '🔐 Welcome Back!' : '📝 Join MHT-CET Pro'}
-              </h2>
-              <p className="text-gray-600 font-medium">
-                {authMode === 'login' ? 'Sign in to access your predictions' : 'Create your account to get started'}
-              </p>
-            </div>
-
-            <form onSubmit={handleAuth} className="grid-pro" style={{ gap: 'var(--space-6)' }}>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2 style={{ textAlign: 'center', marginBottom: '32px' }}>{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+            <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {authMode === 'register' && (
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2">
-                    👤 Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={authData.name}
-                    onChange={(e) => setAuthData({ ...authData, name: e.target.value })}
-                    className="input-pro focus-ring-pro"
-                    required
-                  />
+                <div className="form-group">
+                  <label className="form-label">Name</label>
+                  <input className="input-field" type="text" value={authData.name} onChange={e => setAuthData({ ...authData, name: e.target.value })} />
                 </div>
               )}
-
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">
-                  📧 Email Address
-                </label>
-                <input
-                  type="email"
-                  placeholder="Enter your email address"
-                  value={authData.email}
-                  onChange={(e) => setAuthData({ ...authData, email: e.target.value })}
-                  className="input-pro focus-ring-pro"
-                  required
-                />
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="input-field" type="email" value={authData.email} onChange={e => setAuthData({ ...authData, email: e.target.value })} />
               </div>
-
-              <div>
-                <label className="block text-gray-700 font-semibold mb-2">
-                  🔒 Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Enter your password"
-                  value={authData.password}
-                  onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
-                  className="input-pro focus-ring-pro"
-                  required
-                />
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="input-field" type="password" value={authData.password} onChange={e => setAuthData({ ...authData, password: e.target.value })} />
               </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className={`btn-primary-pro focus-ring-pro ${loading ? 'opacity-50' : ''}`}
-                style={{
-                  width: '100%',
-                  padding: 'var(--space-5)',
-                  fontSize: '1.125rem',
-                  fontWeight: '700',
-                  marginTop: 'var(--space-4)'
-                }}
-              >
-                {loading ? '⏳ Processing...' : (authMode === 'login' ? '🚀 Sign In' : '✨ Create Account')}
-              </button>
+              <button className="btn-primary" type="submit">{loading ? 'Processing...' : (authMode === 'login' ? 'Sign In' : 'Register')}</button>
             </form>
-
-            <div className="text-center mt-8">
-              <button
-                onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                className="text-primary font-semibold hover:underline"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                {authMode === 'login' ?
-                  "🆕 Don't have an account? Create one" :
-                  "🔙 Already have an account? Sign in"}
-              </button>
-            </div>
+            <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-muted)' }}>
+              {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
+              <span onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} style={{ color: 'var(--primary)', cursor: 'pointer', marginLeft: '4px', fontWeight: 600 }}>
+                {authMode === 'login' ? 'Sign Up' : 'Login'}
+              </span>
+            </p>
+            <button onClick={() => setShowAuthModal(false)} style={{ marginTop: '20px', width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

@@ -14,7 +14,7 @@ import Prediction from './models/Prediction.js';
 import ChatMessage from './models/ChatMessage.js';
 
 // Middleware
-import { authenticate, optionalAuth, generateToken } from './middleware/auth.js';
+import { authenticate, optionalAuth, generateToken, authorize } from './middleware/auth.js';
 
 // Seeders
 import { seedColleges } from './seeders/collegeSeeder.js';
@@ -110,6 +110,104 @@ app.post('/api/seed', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Seeding failed',
+      error: error.message
+    });
+  }
+});
+
+// ---------------------------------------------------------
+// ADMIN ROUTES
+// ---------------------------------------------------------
+
+// SEED ADMIN (Dev only - create admin with custom credentials)
+app.post('/api/admin/seed', async (req, res) => {
+  try {
+    const adminEmail = 'admin@mhtcet.com';
+    const adminPass = 'Irfan@808080'; // Updated as per user request
+
+    // Check if exists
+    let admin = await User.findOne({ email: adminEmail });
+    if (admin) {
+      // Update password if admin exists
+      admin.password = adminPass; // schema pre-save will hash it
+      admin.role = 'admin';
+      await admin.save();
+      return res.json({ success: true, message: 'Admin updated successfully', email: adminEmail });
+    }
+
+    // Create
+    admin = new User({
+      name: 'System Admin',
+      email: adminEmail,
+      password: adminPass,
+      role: 'admin',
+      isActive: true,
+      profile: {
+        city: 'Mumbai',
+        category: 'General'
+      }
+    });
+
+    await admin.save();
+
+    res.json({
+      success: true,
+      message: 'Admin user created successfully',
+      email: adminEmail,
+      hint: 'Password is Irfan@808080'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET ALL USERS (Admin Only)
+app.get('/api/admin/users', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('-password') // Exclude password
+      .sort({ createdAt: -1 }); // Newest first
+
+    res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users',
+      error: error.message
+    });
+  }
+});
+
+// DELETE USER (Admin Only)
+app.delete('/api/admin/users/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Prevent deleting self (current logged in admin)
+    if (user._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot delete yourself' });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    // Also delete related data? (Optional: Predictions, ChatHistory)
+    // For now, simple user deletion is sufficient.
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete user',
       error: error.message
     });
   }
@@ -790,49 +888,112 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
     let response = '';
     let intent = 'general';
 
-    // Enhanced AI responses for comprehensive college information
-    if (lowerMessage.includes('coep') || lowerMessage.includes('college of engineering pune')) {
-      response = `🏛️ **College of Engineering Pune (COEP)**\n\n📍 **Location**: Pune, Maharashtra\n🏆 **Ranking**: #1 in Maharashtra for Engineering\n💰 **Fees**: ₹87,000/year (Government)\n📊 **Cutoff**: 99.5%+ for Computer Engineering\n💼 **Placements**: Average ₹12 LPA, Highest ₹45 LPA\n🏢 **Top Recruiters**: Microsoft, Google, Amazon, TCS\n📚 **Popular Branches**: Computer, IT, Mechanical, Civil\n\nWould you like specific information about any branch or placement details?`;
+    // Context-Aware Personalization
+    const userPercentile = context?.userPercentile ? parseFloat(context.userPercentile) : null;
+    const userCategory = context?.userCategory || 'General';
+    const userName = req.user?.name ? req.user.name.split(' ')[0] : 'Aspiring Engineer';
+
+    // Helper to get admission chance
+    const getChance = (cutoff) => {
+      if (!userPercentile) return "I'd need your percentile to predict that. Please enter it in the AI Predictor tab!";
+      const diff = userPercentile - cutoff;
+      if (diff >= 0) return "Excellent! You have a very high chance (Probable). 🌟";
+      if (diff >= -1.5) return "You have a decent chance, it might be borderline. 🤞";
+      return "It looks difficult with your current percentile, but don't lose hope! Try spot rounds. 💪";
+    };
+
+    // Enhanced AI responses
+    if (lowerMessage.includes('chance') || lowerMessage.includes('can i get') || lowerMessage.includes('prediction')) {
+      if (lowerMessage.includes('coep')) {
+        response = `📊 **Admission Prediction for COEP**\n\nYour Percentile: **${userPercentile || 'Not provided'}**\nCOEP Computer Cutoff: ~99.5%\nCOEP Mech Cutoff: ~98.0%\n\n🔮 **Prediction**: ${getChance(99.0)}\n\n💡 Note: Cutoffs vary by category (${userCategory}). This is an estimate based on last year.`;
+        intent = 'prediction_specific';
+      } else if (lowerMessage.includes('vjti')) {
+        response = `📊 **Admission Prediction for VJTI Mumbai**\n\nYour Percentile: **${userPercentile || 'Not provided'}**\nVJTI Computer Cutoff: ~99.3%\nVJTI IT Cutoff: ~99.0%\n\n🔮 **Prediction**: ${getChance(98.5)}\n\n💡 Competition is high at VJTI!`;
+        intent = 'prediction_specific';
+      } else if (userPercentile) {
+        response = `🔮 **Personalized College Recommendations**\n\nBased on your percentile of **${userPercentile}%** (${userCategory}):\n\n`;
+        if (userPercentile > 98) response += `🌟 **Ambitious/Top Tier**:\n• COEP Pune\n• VJTI Mumbai\n• SPIT Mumbai\n• PICT Pune`;
+        else if (userPercentile > 90) response += `🎯 **Excellent Options**:\n• DJ Sanghvi (Mumbai)\n• VIT Pune\n• Walchand Sangli\n• PCCOE Pune`;
+        else if (userPercentile > 80) response += `✅ **Good Choices**:\n• DY Patil Akurdi\n• Thadomal Shahani\n• VESIT Chembur\n• MIT Alandi`;
+        else response += `🚀 **Recommended Strategy**:\nFocus on Tier-2/3 colleges in your region or try for institutional rounds. Detailed list available in the "AI Predictor" results tab!`;
+
+        response += `\n\nWould you like details on any specific college from this list?`;
+        intent = 'recommendation_personalized';
+      } else {
+        response = `🤔 I need your percentile to predict your chances. Please go to the **AI Predictor** tab, enter your details, and then ask me again!`;
+        intent = 'missing_context';
+      }
+    } else if (lowerMessage.includes('coep') || lowerMessage.includes('college of engineering pune')) {
+      response = `🏛️ **College of Engineering Pune (COEP)**\n\n📍 **Location**: Pune (Shivajinagar)\n🏆 **Ranking**: #1 in Maharashtra (Govt)\n💰 **Fees**: ₹90,600/year\n📊 **Cutoffs (Open)**: CS (99.8%), Mech (98.2%), EnTC (99.0%)\n💼 **Placements**: Avg ₹12 LPA, Highest ₹50.5 LPA\n\nDid you know? COEP is one of Asia's oldest engineering colleges (Est. 1854)!`;
       intent = 'college_specific';
-    } else if (lowerMessage.includes('vjti') || lowerMessage.includes('veermata jijabai')) {
-      response = `🏛️ **Veermata Jijabai Technological Institute (VJTI)**\n\n📍 **Location**: Mumbai, Maharashtra\n🏆 **Ranking**: #2 in Maharashtra for Engineering\n💰 **Fees**: ₹83,000/year (Government)\n📊 **Cutoff**: 99.3%+ for Computer Engineering\n💼 **Placements**: Average ₹11.5 LPA, Highest ₹42 LPA\n🏢 **Top Recruiters**: Google, Microsoft, Amazon, Infosys\n📚 **Popular Branches**: Computer, IT, Electronics, Mechanical\n\nNeed more details about admissions or specific branches?`;
+    } else if (lowerMessage.includes('vjti') || lowerMessage.includes('veermata')) {
+      response = `🏛️ **VJTI Mumbai**\n\n📍 **Location**: Matunga, Mumbai\n🏆 **Ranking**: Premier Govt Institute\n💰 **Fees**: ₹85,000/year\n📊 **Cutoffs (Open)**: CS (99.7%), IT (99.5%), Electronics (98.8%)\n💼 **Placements**: Avg ₹11.5 LPA, Highest ₹62 LPA (Texas Instruments)\n\nVJTI is famous for its strong alumni network and tech fests!`;
       intent = 'college_specific';
-    } else if (lowerMessage.includes('cutoff') || lowerMessage.includes('percentile')) {
-      response = `📊 **MHT-CET 2025 Cutoff Information**\n\n🎯 **Top Colleges Cutoffs (General Category)**:\n• COEP Pune: 99.5%+ (Computer Engineering)\n• VJTI Mumbai: 99.3%+ (Computer Engineering)\n• Government College Aurangabad: 97.5%+\n• Walchand Sangli: 96.8%+\n\n📈 **Category-wise Cutoffs Available**:\n• **General Categories**: General Open, OBC, SC, ST, EWS\n• **Tribal Categories**: VJNT, NT1, NT2, NT3\n• **Special Categories**: SEBC, TFWS\n• **Ladies Categories**: All above categories with ladies quota\n\n💡 **Cutoff Trends**:\n• General: Highest cutoffs\n• OBC: 3-8% lower than General\n• SC/ST: 10-20% lower than General\n• EWS: Similar to General\n• Ladies: Slightly lower than respective categories\n\nWhich specific college or branch cutoff would you like to know?`;
-      intent = 'cutoff_inquiry';
-    } else if (lowerMessage.includes('fees') || lowerMessage.includes('cost') || lowerMessage.includes('tuition')) {
-      response = `💰 **Engineering College Fees in Maharashtra**\n\n🏛️ **Government Colleges**:\n• COEP, VJTI: ₹80,000 - ₹1,00,000/year\n• Other Govt Colleges: ₹60,000 - ₹90,000/year\n\n🏢 **Private Colleges**:\n• Tier 1 Private: ₹2-5 lakhs/year\n• Tier 2 Private: ₹1.5-3 lakhs/year\n• Deemed Universities: ₹5-15 lakhs/year\n\n💡 **Additional Costs**:\n• Hostel: ₹50,000-₹1,50,000/year\n• Books & Materials: ₹20,000-₹30,000/year\n\n🎓 **Scholarships Available**: Merit-based, Need-based, Category-based\n\nWant details about specific college fees or scholarship information?`;
+    } else if (lowerMessage.includes('spit') || lowerMessage.includes('sardar patel')) {
+      response = `🏛️ **Sardar Patel Institute of Technology (SPIT)**\n\n📍 **Location**: Andheri, Mumbai\n🏆 **Status**: Autonomous Institute\n💰 **Fees**: ~₹1.7 Lakhs/year\n📊 **Cutoffs**: CS (99.2%), CSE-AI (98.8%)\n💼 **Placements**: Avg ₹15 LPA (Excellent ROI!)\n\nSPIT is known for its rigorous coding culture.`;
+      intent = 'college_specific';
+    } else if (lowerMessage.includes('pict') || lowerMessage.includes('pune institute')) {
+      response = `🏛️ **PICT Pune**\n\n📍 **Location**: Dhankawadi, Pune\n🏆 **Specialty**: Known as "Coding Factory"\n💰 **Fees**: ~₹1 Lakh/year\n📊 **Cutoffs**: CS (99.1%), IT (98.8%), EnTC (97.5%)\n💼 **Placements**: Avg ₹12 LPA, Highest often crosses ₹40 LPA\n\nBest choice if you are strictly focused on CS/IT domain!`;
+      intent = 'college_specific';
+    } else if (lowerMessage.includes('vit') || lowerMessage.includes('vishwakarma')) {
+      response = `🏛️ **VIT Pune (Vishwakarma Institute)**\n\n📍 **Location**: Bibwewadi, Pune\n🏆 **Status**: Top Private Autonomous\n💰 **Fees**: ~₹1.9 Lakhs/year\n📊 **Cutoffs**: CS (98.5%), AI&DS (97.8%)\n💼 **Placements**: Avg ₹9 LPA, Highest ₹33 LPA\n\nOffers a great campus life balance with academics.`;
+      intent = 'college_specific';
+    } else if (lowerMessage.includes('document') || lowerMessage.includes('certificate') || lowerMessage.includes('paper')) {
+      response = `📄 **Required Documents for CAP Rounds (Admission)**\n\n1. **SSC (10th) & HSC (12th) Marksheets**\n2. **MHT-CET 2025 Scorecard**\n3. **Domicile Certificate** (Must for Maharashtra seats)\n4. **Nationality Certificate**\n5. **Leaving Certificate (LC)**\n\n📝 **Category Specific**:\n• Caste Certificate & Validity (SC/ST/OBC)\n• Non-Creamy Layer (OBC/SBC/VJNT) - Valid till March 2026\n• EWS Certificate (if applicable)\n• Income Certificate (for TFWS/EBC scholarships)\n\n💡 Tip: Keep 5 sets of attested photocopies ready!`;
+      intent = 'documents';
+    } else if (lowerMessage.includes('fees') || lowerMessage.includes('cost')) {
+      response = `💰 **Fee Structure Overview (Approx)**\n\n🏛️ **Government Colleges** (COEP, VJTI): ₹80k - ₹90k / year\n🏫 **Aided Colleges** (Sangli, Walchand): ₹85k - ₹1L / year\n🏢 **Private Top Tier** (PICT, SPIT, DJ): ₹1.5L - ₹2.2L / year\n🏘️ **Private Mid Tier**: ₹1L - ₹1.5L / year\n\n💸 **Scholarships (EBC/Category)**:\n• Open/EBC: 50% Tuition Fee Waiver\n• OBC: 50% Tuition Fee Waiver\n• SC/ST: 100% Tuition Fee Waiver\n• TFWS: 100% Tuition Fee Waiver (Merit-based)\n\nDo you want fee details for a specific college?`;
       intent = 'fees_inquiry';
-    } else if (lowerMessage.includes('placement') || lowerMessage.includes('job') || lowerMessage.includes('salary') || lowerMessage.includes('package')) {
-      response = `💼 **Placement Statistics Maharashtra Engineering**\n\n🏆 **Top Performing Colleges**:\n• COEP: 98% placement, ₹12 LPA avg, ₹45 LPA highest\n• VJTI: 96% placement, ₹11.5 LPA avg, ₹42 LPA highest\n• Govt College Aurangabad: 92% placement, ₹8 LPA avg\n\n📊 **Branch-wise Average Packages**:\n• Computer Engineering: ₹12 LPA\n• Information Technology: ₹11 LPA\n• Electronics & Telecom: ₹8 LPA\n• Mechanical Engineering: ₹7 LPA\n\n🏢 **Top Recruiters**: Microsoft, Google, Amazon, TCS, Infosys, L&T, Bajaj Auto\n\nWant specific placement data for any college or branch?`;
-      intent = 'placement_inquiry';
-    } else if (lowerMessage.includes('course') || lowerMessage.includes('branch') || lowerMessage.includes('stream')) {
-      response = `📚 **Engineering Branches in Maharashtra**\n\n🔥 **High Demand Branches**:\n• Computer Engineering - Best placements, highest packages\n• Information Technology - Similar to CSE, great opportunities\n• Electronics & Telecommunication - Good scope in tech\n\n⚙️ **Core Engineering Branches**:\n• Mechanical Engineering - Automotive, manufacturing\n• Civil Engineering - Infrastructure, construction\n• Electrical Engineering - Power, automation\n\n🧪 **Specialized Branches**:\n• Chemical Engineering - Process industries\n• Automobile Engineering - Automotive sector\n• Instrumentation Engineering - Automation, control\n\n💡 **Choosing Tips**: Consider your interests, placement trends, and future scope!\n\nNeed detailed information about any specific branch?`;
-      intent = 'course_inquiry';
-    } else if (lowerMessage.includes('admission') || lowerMessage.includes('counseling') || lowerMessage.includes('cap')) {
-      response = `🎓 **MHT-CET 2025 Admission Process**\n\n📅 **Important Dates**:\n• Application: March 2025\n• Exam Date: May 2025\n• Results: June 2025\n• CAP Counseling: July-August 2025\n\n📋 **CAP Process**:\n1. Online Registration & Document Verification\n2. Choice Filling (College & Branch preferences)\n3. Seat Allotment (Multiple rounds)\n4. Reporting to Allotted College\n\n📄 **Required Documents**:\n• 10th & 12th Marksheets\n• MHT-CET Scorecard\n• Domicile Certificate\n• Caste Certificate (if applicable)\n• Income Certificate\n\n💡 **Pro Tips**: Keep multiple backup options, participate in all rounds!\n\nNeed help with any specific admission step?`;
-      intent = 'admission_process';
-    } else if (lowerMessage.includes('hostel') || lowerMessage.includes('accommodation') || lowerMessage.includes('campus')) {
-      response = `🏠 **Campus & Hostel Information**\n\n🏛️ **Campus Facilities**:\n• Modern Labs & Workshops\n• Central Library with e-resources\n• Sports Complex & Gymnasium\n• Auditorium & Seminar Halls\n• Wi-Fi Campus\n\n🏠 **Hostel Facilities**:\n• Separate Boys & Girls Hostels\n• AC/Non-AC rooms available\n• Mess with quality food\n• 24/7 Security & Medical facility\n• Recreation rooms & study areas\n\n💰 **Hostel Fees**:\n• Government Colleges: ₹50,000-₹80,000/year\n• Private Colleges: ₹1,00,000-₹2,00,000/year\n\n📍 **Location Advantages**: Consider proximity to IT hubs, internship opportunities\n\nWant specific hostel details for any college?`;
-      intent = 'campus_inquiry';
-    } else if (lowerMessage.includes('scholarship') || lowerMessage.includes('financial aid')) {
-      response = `🎓 **Scholarships for Engineering Students**\n\n🏆 **Merit-based Scholarships**:\n• Top 10% students: Up to ₹50,000/year\n• Academic Excellence Awards\n• Topper Scholarships\n\n👥 **Category-based Scholarships**:\n• SC/ST: Full fee waiver + stipend\n• OBC: 50% fee concession\n• EWS: Fee concession available\n\n💰 **Need-based Aid**:\n• Family income < ₹2.5 lakhs: Full support\n• Income ₹2.5-5 lakhs: Partial support\n\n🏢 **Corporate Scholarships**:\n• TCS, Infosys, Wipro student programs\n• Industry-specific scholarships\n\n📋 **Application**: Apply during admission process with income/caste certificates\n\nNeed help with scholarship applications?`;
-      intent = 'scholarship_inquiry';
-    } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-      response = `👋 Hello! I'm your comprehensive MHT-CET AI Assistant, ready to help with all your engineering college queries!\n\n🎯 **I can help you with**:\n• College information & rankings\n• Admission process & cutoffs\n• Fees & scholarships\n• Placement statistics\n• Course details & career prospects\n• Campus facilities & hostel info\n• Exam preparation tips\n\n💡 **Popular Questions**:\n"Tell me about COEP placements"\n"What are the fees for government colleges?"\n"Which branch has best placements?"\n"How is the admission process?"\n\nWhat would you like to know about Maharashtra engineering colleges?`;
+    } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi ') || lowerMessage.trim() === 'hi') {
+      response = `👋 **Hello ${userName}!**\n\nI'm your intelligent MHT-CET Assistant. I can help you with:\n\n1. **Personalized Chances**: "Can I get into COEP with ${userPercentile || 'my score'}?"\n2. **College Info**: Fees, Placements of VJTI, PICT, SPIT, etc.\n3. **Comparisons**: "COEP vs VJTI"\n4. **Process**: Documents, CAP Rounds info\n\nHow can I help you achieve your engineering dream today? 🚀`;
       intent = 'greeting';
-    } else if (lowerMessage.includes('compare') || lowerMessage.includes('vs') || lowerMessage.includes('difference')) {
-      response = `⚖️ **College Comparison Guide**\n\n🏆 **COEP vs VJTI**:\n• COEP: Pune location, slightly higher cutoff, strong alumni network\n• VJTI: Mumbai location, better industry exposure, similar placements\n\n🎯 **Government vs Private**:\n• Government: Lower fees, better ROI, established reputation\n• Private: Modern infrastructure, industry partnerships, flexible curriculum\n\n📊 **Branch Comparison**:\n• CSE vs IT: Very similar, CSE slightly broader scope\n• CSE vs ECE: CSE better for software, ECE for hardware/telecom\n• Mechanical vs Civil: Mech for automotive, Civil for construction\n\n💡 **Comparison Factors**: Cutoff, fees, placements, location, faculty, infrastructure\n\nWhich specific colleges or branches would you like me to compare?`;
-      intent = 'comparison';
-    } else if (lowerMessage.includes('preparation') || lowerMessage.includes('study') || lowerMessage.includes('exam')) {
-      response = `📚 **MHT-CET Preparation Strategy**\n\n📖 **Syllabus Coverage**:\n• Physics: 11th & 12th Maharashtra Board\n• Chemistry: 11th & 12th Maharashtra Board  \n• Mathematics: 11th & 12th Maharashtra Board\n\n⏰ **Time Management**:\n• Physics: 50 questions, 90 minutes\n• Chemistry: 50 questions, 90 minutes\n• Mathematics: 50 questions, 90 minutes\n\n📝 **Preparation Tips**:\n• Focus on NCERT + Maharashtra Board books\n• Practice previous year papers\n• Take regular mock tests\n• Strengthen weak areas\n\n🎯 **Target Strategy**: Aim for 95%+ for top colleges, 85%+ for good colleges\n\nNeed specific subject-wise preparation guidance?`;
-      intent = 'preparation';
-    } else if (lowerMessage.includes('history') || lowerMessage.includes('previous')) {
-      response = `📚 **Chat History & Previous Conversations**\n\n✅ **Your chat history is automatically saved** when you're logged in!\n\n🔍 **How to access**:\n• Click the chat history sidebar (💬 icon)\n• Browse your previous sessions\n• Click any session to reload that conversation\n\n💾 **What's stored**:\n• All your questions and my responses\n• Session timestamps\n• Conversation topics\n\n🔒 **Privacy**: Only you can see your chat history when logged in\n\nIs there something specific from our previous chats you'd like to discuss?`;
-      intent = 'history_inquiry';
     } else {
-      response = `🤖 I'm your comprehensive MHT-CET AI Assistant! I can help with:\n\n🎓 **College Information**:\n• Rankings & comparisons\n• Admission cutoffs & process\n• Fees & scholarship details\n• Campus facilities & hostels\n\n💼 **Career Guidance**:\n• Placement statistics & trends\n• Branch-wise opportunities\n• Industry insights\n• Salary packages\n\n📚 **Academic Support**:\n• Course details & curriculum\n• Exam preparation tips\n• Study strategies\n\n💡 **Try asking**:\n"Which college is best for Computer Engineering?"\n"What are the placement statistics for COEP?"\n"How much are the fees for government colleges?"\n"Compare COEP vs VJTI"\n\nWhat would you like to know about Maharashtra engineering colleges?`;
-      intent = 'general';
+      // ---------------------------------------------------------
+      // GEMINI AI INTEGRATION (Fallback for Open-Ended Queries)
+      // ---------------------------------------------------------
+      try {
+        if (!process.env.GEMINI_API_KEY) {
+          throw new Error('Gemini API Key not configured');
+        }
+
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+        // Construct a Context-Aware Prompt
+        const systemPrompt = `
+          You are an expert MHT-CET Admission Counselor and Career Guide for engineering aspirants in Maharashtra.
+          
+          User Context:
+          - Name: ${userName}
+          - Category: ${userCategory}
+          - Percentile: ${userPercentile || 'Unknown'}
+          - Interested Courses: ${context?.userCourses?.join(', ') || 'Not specified'}
+          
+          Your Task:
+          Answer the student's question: "${message}" matches their profile.
+          
+          Guidelines:
+          1. Be encouraging, professional, and precise.
+          2. Focus on engineering colleges in Maharashtra (COEP, VJTI, SPIT, PICT, VIT, etc.).
+          3. If asked about chances, use their percentile (if available) to give a realistic assessment.
+          4. If asked about "Best Colleges", suggest a mix of Govt and Top Private based on their score.
+          5. Keep the response concise (under 100 words) but informative.
+          6. Use emojis to make it friendly.
+        `;
+
+        const result = await model.generateContent(systemPrompt);
+        const text = result.response.text();
+
+        response = text;
+        intent = 'ai_generated';
+
+      } catch (aiError) {
+        console.error('AI Generation Failed:', aiError.message);
+        // Fallback to generic response if AI fails or Key missing
+        response = `🤖 **Smart Assistant**\n\nI see you have a unique question! To give you the best answer, I need to be connected to my advanced AI brain (Gemini).\n\n**Dev Note**: Please add \`GEMINI_API_KEY\` to your backend \`.env\` file to unlock fully open-ended responses!\n\nIn the meantime, try asking about:\n• Cutoffs for COEP/VJTI\n• Documents required\n• Fee structures\n• "Can I get CS with 95 percentile?"`;
+        intent = 'ai_fallback';
+      }
     }
 
     // Save chat message if user is authenticated and sessionId is provided
@@ -1152,7 +1313,7 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎓 MHT-CET 2025 College Prediction Report</h1>
+            <h1 s>🎓 MHT-CET 2025 College Prediction Report</h1>
             <p><strong>Generated on:</strong> ${new Date().toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'long',

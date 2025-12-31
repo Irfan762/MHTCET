@@ -33,6 +33,10 @@ const predictionSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    city: {
+      type: String,
+      default: 'All Cities'
+    },
     examType: {
       type: String,
       default: 'MHT-CET'
