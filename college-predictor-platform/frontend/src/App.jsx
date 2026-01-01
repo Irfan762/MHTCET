@@ -36,6 +36,7 @@ function App() {
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
   const [adminUsers, setAdminUsers] = useState([]); // Admin State
+  const [adminSearchTerm, setAdminSearchTerm] = useState('');
 
   const courseOptions = [
     'Computer Engineering',
@@ -2423,6 +2424,7 @@ function App() {
           {/* Admin Dashboard Tab */}
           {activeTab === 'adminUser' && user?.role === 'admin' && (
             <div className="animate-fade-in-pro">
+              {/* Professional Admin Header */}
               <div className="glass-card-pro animate-slide-top" style={{
                 padding: '2rem',
                 marginBottom: '2rem',
@@ -2430,82 +2432,165 @@ function App() {
                 background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
                 color: 'white'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ fontSize: '2.5rem' }}>👑</div>
-                  <div>
-                    <h2 style={{ fontSize: '2rem', fontWeight: '800', margin: 0 }}>Admin Dashboard</h2>
-                    <p style={{ color: '#94a3b8', margin: '0.5rem 0 0 0' }}>Manage users and system settings</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '16px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '2rem',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                  }}>
+                    👑
                   </div>
-                  <button onClick={fetchAdminUsers} className="btn-secondary" style={{ marginLeft: 'auto', padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-                    🔄 Refresh
-                  </button>
+                  <div>
+                    <h2 style={{ fontSize: '2.25rem', fontWeight: '800', margin: 0, letterSpacing: '-0.025em' }}>Admin Control Center</h2>
+                    <p style={{ color: '#94a3b8', margin: '0.25rem 0 0 0', fontSize: '1.1rem' }}>Enterprise-grade user management & system monitoring</p>
+                  </div>
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem' }}>
+                    <button
+                      onClick={fetchAdminUsers}
+                      className="btn-primary"
+                      style={{ padding: '0.75rem 1.5rem', fontSize: '0.95rem', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', boxShadow: 'none' }}
+                    >
+                      🔄 Refresh Data
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border)' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Registered Users ({adminUsers.length})</h3>
+              {/* System Stats Grid */}
+              <div className="admin-stats-grid">
+                {[
+                  { label: 'Total Registrations', value: adminUsers.length, icon: '👥', color: '#eff6ff', textColor: '#3b82f6' },
+                  { label: 'Verified Students', value: adminUsers.filter(u => u.role === 'student').length, icon: '🎓', color: '#ecfdf5', textColor: '#10b981' },
+                  { label: 'System Admins', value: adminUsers.filter(u => u.role === 'admin').length, icon: '🛡️', color: '#fef3c7', textColor: '#d97706' },
+                  { label: 'Recent Activity', value: '24h', icon: '⚡', color: '#fdf2f8', textColor: '#db2777' }
+                ].map((stat, i) => (
+                  <div key={i} className="admin-stat-card">
+                    <div className="admin-stat-icon" style={{ background: stat.color }}>{stat.icon}</div>
+                    <div className="admin-stat-details">
+                      <h4>{stat.label}</h4>
+                      <div className="value">{stat.value}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Enhanced User Table Container */}
+              <div className="admin-table-container animate-slide-in-pro">
+                <div className="admin-table-header">
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Student Directory</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Manage and monitor all platform participants</p>
+                  </div>
+                  <div className="admin-search-bar">
+                    <input
+                      type="text"
+                      placeholder="Search users by name, email or category..."
+                      value={adminSearchTerm}
+                      onChange={(e) => setAdminSearchTerm(e.target.value)}
+                    />
+                  </div>
                 </div>
+
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                    <thead style={{ background: '#f8fafc', color: '#64748b', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700' }}>
+                  <table className="admin-table">
+                    <thead>
                       <tr>
-                        <th style={{ padding: '1rem', textAlign: 'left' }}>User</th>
-                        <th style={{ padding: '1rem', textAlign: 'left' }}>Role</th>
-                        <th style={{ padding: '1rem', textAlign: 'left' }}>City</th>
-                        <th style={{ padding: '1rem', textAlign: 'left' }}>Category</th>
-                        <th style={{ padding: '1rem', textAlign: 'left' }}>Joined</th>
-                        <th style={{ padding: '1rem', textAlign: 'center' }}>Actions</th>
+                        <th>User Identity</th>
+                        <th>Role & Access</th>
+                        <th>Location</th>
+                        <th>Admission Profile</th>
+                        <th>Joined Date</th>
+                        <th style={{ textAlign: 'center' }}>Management</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {adminUsers.map((u, i) => (
-                        <tr key={u._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '1rem' }}>
-                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{u.name}</div>
-                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{u.email}</div>
-                          </td>
-                          <td style={{ padding: '1rem' }}>
-                            <span className={`badge ${u.role === 'admin' ? 'badge-pink' : 'badge-indigo'}`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td style={{ padding: '1rem', color: '#475569' }}>{u.profile?.city || '-'}</td>
-                          <td style={{ padding: '1rem', color: '#475569' }}>{u.profile?.category || 'General'}</td>
-                          <td style={{ padding: '1rem', color: '#475569' }}>
-                            {new Date(u.createdAt).toLocaleDateString()}
-                          </td>
-                          <td style={{ padding: '1rem', textAlign: 'center' }}>
-                            {u.role !== 'admin' && (
-                              <button
-                                onClick={() => handleDeleteUser(u._id)}
-                                style={{
-                                  background: '#fee2e2',
-                                  color: '#ef4444',
-                                  border: 'none',
-                                  padding: '0.5rem',
-                                  borderRadius: '8px',
-                                  cursor: 'pointer',
-                                  transition: 'background 0.2s',
-                                  fontSize: '1.2rem'
-                                }}
-                                title="Delete User"
-                              >
-                                🗑️
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {adminUsers
+                        .filter(u =>
+                          u.name.toLowerCase().includes(adminSearchTerm.toLowerCase()) ||
+                          u.email.toLowerCase().includes(adminSearchTerm.toLowerCase()) ||
+                          (u.profile?.city && u.profile.city.toLowerCase().includes(adminSearchTerm.toLowerCase()))
+                        )
+                        .map((u, i) => (
+                          <tr key={u._id}>
+                            <td>
+                              <div className="user-info-cell">
+                                <div className="user-avatar" style={{
+                                  background: `linear-gradient(135deg, ${['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][i % 6]
+                                    } 0%, ${['#1d4ed8', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777'][i % 6]
+                                    } 100%)`
+                                }}>
+                                  {u.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <div className="user-name">{u.name}</div>
+                                  <div className="user-email">{u.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`badge ${u.role === 'admin' ? 'badge-pink' : 'badge-indigo'}`} style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#475569' }}>
+                                <span>📍</span> {u.profile?.city || 'Not Set'}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{u.profile?.category || 'General'}</span>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{u.profile?.percentile ? `Percentile: ${u.profile.percentile}%` : 'No percentile yet'}</span>
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '0.9rem', color: '#475569' }}>
+                                {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {u.role !== 'admin' ? (
+                                <button
+                                  onClick={() => handleDeleteUser(u._id)}
+                                  className="action-btn-delete"
+                                  title="Revoke Access / Delete User"
+                                >
+                                  🗑️
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '1.2rem', opacity: 0.3 }} title="System admins cannot be deleted">🔒</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       {adminUsers.length === 0 && (
                         <tr>
-                          <td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                            No users found. Try refreshing.
+                          <td colSpan="6" style={{ padding: '6rem 3rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
+                            <h3 style={{ color: '#64748b', margin: 0 }}>No users found</h3>
+                            <p style={{ color: '#94a3b8', marginTop: '0.5rem' }}>Try refreshing or adjusting your search criteria</p>
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div style={{ padding: '1rem 1.5rem', background: '#fcfdfe', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                    Showing <strong>{adminUsers.length}</strong> total system users
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[1].map(p => (
+                      <button key={p} style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--primary)', color: 'white', fontWeight: 600, fontSize: '0.85rem' }}>{p}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
