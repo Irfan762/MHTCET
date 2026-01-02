@@ -55,7 +55,7 @@ const predictionSchema = new mongoose.Schema({
     course: String,
     probability: {
       type: String,
-      enum: ['High', 'Medium', 'Low', 'Probable', 'Borderline'],
+      enum: ['High', 'Medium', 'Low', 'Probable', 'Borderline', 'Safe', 'Difficult', 'Very High Chance'],
       required: true
     },
     admissionChance: Number,
@@ -78,7 +78,12 @@ const predictionSchema = new mongoose.Schema({
       averagePackage: String,
       highestPackage: String,
       placementRate: String
-    }
+    },
+    aiConfidence: String,
+    aiInsight: String,
+    trendScore: String,
+    allRounds: Array,
+    bestMatchingRound: Number
   }],
   metadata: {
     totalColleges: {

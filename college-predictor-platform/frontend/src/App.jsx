@@ -14,6 +14,7 @@ function App() {
   const [selectedCollege, setSelectedCollege] = useState(null);
   const [showCollegeModal, setShowCollegeModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedPredictionForAnalysis, setSelectedPredictionForAnalysis] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [showHistoryView, setShowHistoryView] = useState(false);
@@ -98,6 +99,7 @@ function App() {
     { id: 'colleges', label: 'Colleges', icon: '🏛️', desc: 'Explore Colleges' },
     { id: 'placements', label: 'Placements', icon: '💼', desc: 'Career Data' },
     { id: 'results', label: 'My Results', icon: '📊', desc: 'Your Predictions' },
+    { id: 'analysis', label: 'Round Analysis', icon: '📈', desc: 'Multi-Round Trends' },
     { id: 'chat', label: 'AI Assistant', icon: '🤖', desc: 'Comprehensive Help' },
     ...(user?.role === 'admin' ? [{ id: 'adminUser', label: 'Admin Panel', icon: '👑', desc: 'Student Management' }] : [])
   ];
@@ -1024,9 +1026,11 @@ function App() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div className="glass-card" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
-                        <div style={{ color: '#667eea', fontSize: '0.75rem', fontWeight: '600' }}>CUTOFF</div>
+                        <div style={{ color: '#667eea', fontSize: '0.75rem', fontWeight: '600' }}>BEST CUTOFF</div>
                         <div style={{ color: '#1f2937', fontSize: '1.1rem', fontWeight: '700' }}>
-                          {college.cutoff?.general || 'N/A'}%
+                          {college.rounds && college.rounds.length > 0
+                            ? `${Math.max(...college.rounds.map(r => r.cutoff?.general || 0))}%`
+                            : (college.cutoff?.general ? `${college.cutoff.general}%` : 'N/A')}
                         </div>
                       </div>
                       <div className="glass-card" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
@@ -1066,7 +1070,7 @@ function App() {
                   <button
                     onClick={() => setCollegesDisplayLimit(prev => prev + 24)}
                     className="btn-modern animate-pulse-glow"
-                    style={{ padding: '1rem 2rem', fontSize: '1rem' }}
+                    style={{ padding: '1rem 2rem', fontSize: '1rem', border: ' 1px solid black', borderRadius: '12px', cursor: 'pointer' }}
                   >
                     📚 Load More Colleges ({filteredColleges.length - collegesDisplayLimit} remaining)
                   </button>
@@ -1830,7 +1834,7 @@ function App() {
                           <div>City</div>
                           <div>Branch</div>
                           <div style={{ textAlign: 'center' }}>Type</div>
-                          <div style={{ textAlign: 'center' }}>Cutoff</div>
+                          <div style={{ textAlign: 'center' }}>AI Accuracy</div>
                           <div style={{ textAlign: 'center' }}>Status</div>
                         </div>
                         {predictions
@@ -1845,17 +1849,164 @@ function App() {
                                   {prediction.seatTypeLabel}
                                 </span>
                               </div>
-                              <div className="col-cutoff">{prediction.cutoffForCategory}%</div>
                               <div style={{ textAlign: 'center' }}>
-                                <span className={`badge ${prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`}>
+                                <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary-600)' }}>
+                                  {prediction.aiConfidence}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600' }}>AI CONFIDENCE</div>
+                              </div>
+                              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                <span className={`badge ${prediction.riskLabel.includes('High') ? 'badge-success animate-pulse-glow' : prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`}>
                                   {prediction.riskLabel}
                                 </span>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '150px', lineHeight: '1.2' }}>
+                                  {prediction.aiInsight}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedPredictionForAnalysis(prediction);
+                                      setActiveTab('analysis');
+                                    }}
+                                    className="btn-link"
+                                    style={{ fontSize: '12px', padding: '2px 6px', color: 'var(--primary)', fontWeight: '600', borderRadius: '4px', border: '2px solid black' }}
+                                  >
+                                    Analyze 📈
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Round Analysis Tab */}
+          {activeTab === 'analysis' && (
+            <div className="animate-fade-in-pro">
+              <div className="glass-card animate-slide-top" style={{ padding: '2rem', marginBottom: '2rem', borderRadius: '20px' }}>
+                <h2 className="gradient-text-pro" style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '1rem' }}>
+                  📈 Multi-Round Cutoff Analysis
+                </h2>
+                <p className="text-gray-600 text-lg">
+                  Visualize and analyze cutoff trends across all 4 rounds of MHT-CET counseling.
+                </p>
+              </div>
+
+              {selectedPredictionForAnalysis ? (
+                <div className="grid-pro" style={{ gap: '2rem' }}>
+                  <div className="card-pro animate-slide-in-pro">
+                    <div className="card-header-pro">
+                      <h3 style={{ margin: 0 }}>{selectedPredictionForAnalysis.name}</h3>
+                      <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)' }}>{selectedPredictionForAnalysis.branch}</p>
+                    </div>
+                    <div className="card-body-pro">
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+                        {[1, 2, 3, 4].map(roundNum => {
+                          const roundData = selectedPredictionForAnalysis.allRounds?.find(r => r.round === roundNum);
+                          const isBestRound = selectedPredictionForAnalysis.bestMatchingRound === roundNum;
+
+                          return (
+                            <div
+                              key={roundNum}
+                              className={`glass-card ${isBestRound ? 'animate-pulse-glow' : ''}`}
+                              style={{
+                                padding: '1rem',
+                                textAlign: 'center',
+                                border: isBestRound ? '2px solid var(--success-500)' : '1px solid rgba(0,0,0,0.1)',
+                                background: isBestRound ? 'rgba(16, 185, 129, 0.05)' : 'white'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                ROUND {roundNum}
+                              </div>
+                              <div style={{ fontSize: '1.5rem', fontWeight: '800', color: isBestRound ? 'var(--success-600)' : '#1f2937' }}>
+                                {roundData ? `${roundData.cutoff}%` : 'N/A'}
+                              </div>
+                              {isBestRound && (
+                                <div style={{ fontSize: '0.7rem', color: 'var(--success-600)', fontWeight: '700', marginTop: '4px' }}>
+                                  🎯 BEST MATCH
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px' }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: '#1f2937' }}>Analysis Insights</h4>
+                        <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#4b5563', lineHeight: '1.6' }}>
+                          <li>The cutoff generally <strong>{selectedPredictionForAnalysis.allRounds?.length > 1 && selectedPredictionForAnalysis.allRounds[0].cutoff > selectedPredictionForAnalysis.allRounds[selectedPredictionForAnalysis.allRounds.length - 1].cutoff ? 'decreased' : 'increased'}</strong> across rounds.</li>
+                          <li>You have a <strong>{selectedPredictionForAnalysis.riskLabel}</strong> chance of admission based on Round {selectedPredictionForAnalysis.bestMatchingRound} data.</li>
+                          <li>Your percentile ({formData.percentile}%) is <strong>{Math.abs(selectedPredictionForAnalysis.difference)}% {selectedPredictionForAnalysis.difference >= 0 ? 'above' : 'below'}</strong> the Round {selectedPredictionForAnalysis.bestMatchingRound} cutoff.</li>
+                          {selectedPredictionForAnalysis.allRounds?.length < 3 && (
+                            <li style={{ color: '#ef4444' }}>💡 Note: Limited historical round data available for this specific branch.</li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '2rem' }}>
+                    <h3 style={{ margin: '0 0 1.5rem 0' }}>Cutoff Trend Visualization</h3>
+                    <div style={{ height: '200px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', gap: '2rem', padding: '0 2rem', borderBottom: '2px solid #e2e8f0' }}>
+                      {[1, 2, 3, 4].map(roundNum => {
+                        const roundData = selectedPredictionForAnalysis.allRounds?.find(r => r.round === roundNum);
+                        const height = roundData ? (roundData.cutoff / 100) * 100 : 0;
+
+                        return (
+                          <div key={roundNum} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                            <div
+                              style={{
+                                width: '100%',
+                                height: `${height}%`,
+                                background: selectedPredictionForAnalysis.bestMatchingRound === roundNum ? 'var(--primary)' : '#cbd5e1',
+                                borderRadius: '8px 8px 0 0',
+                                transition: 'height 1s ease-out',
+                                cursor: 'pointer',
+                                position: 'relative'
+                              }}
+                              title={`Round ${roundNum}: ${roundData?.cutoff || 'N/A'}%`}
+                            >
+                              {roundData && (
+                                <div style={{ position: 'absolute', top: '-25px', width: '100%', textAlign: 'center', fontSize: '0.75rem', fontWeight: '700' }}>
+                                  {roundData.cutoff}%
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ marginTop: '8px', fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>R{roundNum}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'center', padding: '2rem' }}>
+                    <button
+                      onClick={() => setActiveTab('results')}
+                      className="btn-secondary-pro"
+                      style={{ padding: '1rem 2rem' }}
+                    >
+                      ← Back to Predictions
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="glass-card" style={{ padding: '4rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📈</div>
+                  <h3>No Selection for Analysis</h3>
+                  <p className="text-gray-500">Go to "My Results" and click "Analyze" on any college to see detailed round-wise trends.</p>
+                  <button
+                    onClick={() => setActiveTab('results')}
+                    className="btn-primary-pro"
+                    style={{ marginTop: '1.5rem' }}
+                  >
+                    View My Predictions
+                  </button>
                 </div>
               )}
             </div>
@@ -2596,76 +2747,133 @@ function App() {
             </div>
           )}
         </div> {/* End content-scroll */}
-      </main>
+      </main >
 
       {/* Modals Container */}
-      {showCollegeModal && selectedCollege && (
-        <div className="modal-overlay" onClick={() => setShowCollegeModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 800 }}>{selectedCollege.name}</h2>
-              <button onClick={() => setShowCollegeModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
-            </div>
+      {
+        showCollegeModal && selectedCollege && (
+          <div className="modal-overlay" onClick={() => setShowCollegeModal(false)}>
+            <div className="modal-content" style={{ maxWidth: '800px' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '24px', fontWeight: 800 }}>{selectedCollege.name}</h2>
+                <button onClick={() => setShowCollegeModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+              </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
-              <div className="stat-card" style={{ padding: '16px' }}>
-                <div className="stat-info">
-                  <h3>General Cutoff</h3>
-                  <div className="stat-value" style={{ fontSize: '20px' }}>{selectedCollege.cutoff?.general}%</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                {[1, 2, 3, 4].map(rNum => {
+                  const rData = (selectedCollege.rounds || []).find(r => String(r.number) === String(rNum));
+                  const cutoffVal = rData?.cutoff?.general;
+                  return (
+                    <div key={rNum} className="glass-card" style={{ padding: '12px', textAlign: 'center', background: '#f8fafc', border: rData ? '1px solid #e2e8f0' : '1px dashed #cbd5e1' }}>
+                      <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#64748b' }}>ROUND {rNum}</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: (cutoffVal && cutoffVal > 0) ? '#1e293b' : '#94a3b8' }}>
+                        {cutoffVal && cutoffVal > 0 ? `${cutoffVal}%` : '—'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1e293b' }}>📚 Course-wise Round Cutoffs (General)</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', textAlign: 'left' }}>
+                        <th style={{ padding: '10px', borderBottom: '2px solid #e2e8f0' }}>Branch Name</th>
+                        <th style={{ padding: '10px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>R1</th>
+                        <th style={{ padding: '10px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>R2</th>
+                        <th style={{ padding: '10px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>R3</th>
+                        <th style={{ padding: '10px', borderBottom: '2px solid #e2e8f0', textAlign: 'center' }}>R4</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedCollege.courses?.map((courseObj, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '10px', fontWeight: '600', color: '#475569' }}>{courseObj.name || (typeof courseObj === 'string' ? courseObj : 'Unnamed Course')}</td>
+                          {[1, 2, 3, 4].map(n => {
+                            const r = (courseObj.rounds || []).find(r => String(r.number) === String(n));
+                            const val = r?.cutoff?.general;
+                            return (
+                              <td key={n} style={{ padding: '10px', textAlign: 'center' }}>
+                                {(val && val > 0) ? (
+                                  <span style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: '#f0f9ff',
+                                    color: '#0369a1',
+                                    fontWeight: '700'
+                                  }}>
+                                    {val}%
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#cbd5e1' }}>—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              <div className="stat-card" style={{ padding: '16px' }}>
-                <div className="stat-info">
-                  <h3>Avg Package</h3>
-                  <div className="stat-value" style={{ fontSize: '20px' }}>{selectedCollege.placements?.averagePackage}</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+                <div className="stat-card" style={{ padding: '16px', background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)' }}>
+                  <div className="stat-info">
+                    <h3 style={{ margin: 0, fontSize: '0.85rem', color: '#0369a1' }}>Avg Placement Package</h3>
+                    <div className="stat-value" style={{ fontSize: '1.25rem', color: '#0c4a6e' }}>{selectedCollege.placements?.averagePackage || '₹8.5 LPA'}</div>
+                  </div>
+                </div>
+                <div className="stat-card" style={{ padding: '16px', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)' }}>
+                  <div className="stat-info">
+                    <h3 style={{ margin: 0, fontSize: '0.85rem', color: '#166534' }}>Placement Rate</h3>
+                    <div className="stat-value" style={{ fontSize: '1.25rem', color: '#064e3b' }}>{selectedCollege.placements?.placementRate || '95%'}</div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label">Available Branches</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {selectedCollege.courses?.map(c => <span key={c} className="badge badge-indigo">{c}</span>)}
-              </div>
+              <button className="btn-primary" onClick={() => downloadPDF(selectedCollege)} style={{ marginTop: '24px' }}>Download Detailed Report</button>
             </div>
-
-            <button className="btn-primary" onClick={() => downloadPDF(selectedCollege)} style={{ marginTop: '24px' }}>Download Detailed Report</button>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {showAuthModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2 style={{ textAlign: 'center', marginBottom: '32px' }}>{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
-            <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {authMode === 'register' && (
+      {
+        showAuthModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h2 style={{ textAlign: 'center', marginBottom: '32px' }}>{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+              <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {authMode === 'register' && (
+                  <div className="form-group">
+                    <label className="form-label">Name</label>
+                    <input className="input-field" type="text" value={authData.name} onChange={e => setAuthData({ ...authData, name: e.target.value })} />
+                  </div>
+                )}
                 <div className="form-group">
-                  <label className="form-label">Name</label>
-                  <input className="input-field" type="text" value={authData.name} onChange={e => setAuthData({ ...authData, name: e.target.value })} />
+                  <label className="form-label">Email</label>
+                  <input className="input-field" type="email" value={authData.email} onChange={e => setAuthData({ ...authData, email: e.target.value })} />
                 </div>
-              )}
-              <div className="form-group">
-                <label className="form-label">Email</label>
-                <input className="input-field" type="email" value={authData.email} onChange={e => setAuthData({ ...authData, email: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Password</label>
-                <input className="input-field" type="password" value={authData.password} onChange={e => setAuthData({ ...authData, password: e.target.value })} />
-              </div>
-              <button className="btn-primary" type="submit">{loading ? 'Processing...' : (authMode === 'login' ? 'Sign In' : 'Register')}</button>
-            </form>
-            <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-muted)' }}>
-              {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
-              <span onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} style={{ color: 'var(--primary)', cursor: 'pointer', marginLeft: '4px', fontWeight: 600 }}>
-                {authMode === 'login' ? 'Sign Up' : 'Login'}
-              </span>
-            </p>
-            <button onClick={() => setShowAuthModal(false)} style={{ marginTop: '20px', width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <input className="input-field" type="password" value={authData.password} onChange={e => setAuthData({ ...authData, password: e.target.value })} />
+                </div>
+                <button className="btn-primary" type="submit">{loading ? 'Processing...' : (authMode === 'login' ? 'Sign In' : 'Register')}</button>
+              </form>
+              <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', color: 'var(--text-muted)' }}>
+                {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
+                <span onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} style={{ color: 'var(--primary)', cursor: 'pointer', marginLeft: '4px', fontWeight: 600 }}>
+                  {authMode === 'login' ? 'Sign Up' : 'Login'}
+                </span>
+              </p>
+              <button onClick={() => setShowAuthModal(false)} style={{ marginTop: '20px', width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
 

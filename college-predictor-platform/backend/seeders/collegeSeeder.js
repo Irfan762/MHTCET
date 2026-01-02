@@ -37,8 +37,8 @@ const parseCSVData = () => {
     let processedLines = 0;
     let skippedLines = 0;
 
-    // Process each line of CSV data (process more lines for production)
-    for (let i = 1; i < Math.min(lines.length, 10000); i++) { // Increased to 10000 lines
+    // Process each line of CSV data (process all lines for complete data)
+    for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) {
         skippedLines++;
@@ -142,7 +142,8 @@ const parseCSVData = () => {
             accreditation: getAccreditation(collegeName),
             ranking: generateRanking(),
             contact: generateContact(collegeName, collegeLocation),
-            featured: isFeaturedCollege(collegeName)
+            featured: isFeaturedCollege(collegeName),
+            rounds: []
           });
         }
 
@@ -156,6 +157,7 @@ const parseCSVData = () => {
             code: branchCode || '',
             duration: '4 years',
             seats: generateSeats(branchName),
+            rounds: [],
             cutoff: {
               general: gopens,
               obc: gobcs,
@@ -181,6 +183,62 @@ const parseCSVData = () => {
               }
             }
           });
+        }
+
+        // Add round data to course
+        const targetCourse = college.courses.find(c => c.name === branchName);
+        if (targetCourse && round) {
+          const roundNum = parseInt(round.replace(/[^0-9]/g, '')) || 1;
+          const roundCutoff = {
+            general: gopens,
+            obc: gobcs,
+            sc: gscs,
+            st: gsts,
+            ews: ews,
+            vjnt: gvjs,
+            nt1: gnt1s,
+            nt2: gnt2s,
+            nt3: gnt3s,
+            sebc: gsebcs,
+            tfws: tfws,
+            ladies: {
+              general: lopens,
+              obc: lobcs,
+              sc: lscs,
+              st: lsts,
+              vjnt: lvjs,
+              nt1: lnt1s,
+              nt2: lnt2s,
+              nt3: lnt3s,
+              sebc: lsebcs
+            }
+          };
+
+          // Update course round data
+          const existingRound = targetCourse.rounds.find(r => r.number === roundNum);
+          if (!existingRound) {
+            targetCourse.rounds.push({ number: roundNum, cutoff: roundCutoff });
+          }
+
+          // Also update college round data
+          let collegeRound = college.rounds.find(r => r.number === roundNum);
+          if (!collegeRound) {
+            collegeRound = { number: roundNum, cutoff: { ...roundCutoff } };
+            college.rounds.push(collegeRound);
+          } else {
+            // Update college round cutoff if this branch has a higher cutoff for the same round
+            Object.keys(roundCutoff).forEach(cat => {
+              if (cat === 'ladies') {
+                Object.keys(roundCutoff.ladies).forEach(lcat => {
+                  if (roundCutoff.ladies[lcat] && (!collegeRound.cutoff.ladies[lcat] || roundCutoff.ladies[lcat] > collegeRound.cutoff.ladies[lcat])) {
+                    collegeRound.cutoff.ladies[lcat] = roundCutoff.ladies[lcat];
+                  }
+                });
+              } else if (roundCutoff[cat] && (!collegeRound.cutoff[cat] || roundCutoff[cat] > collegeRound.cutoff[cat])) {
+                collegeRound.cutoff[cat] = roundCutoff[cat];
+              }
+            });
+          }
         }
 
         // Update college overall cutoff to be the best among all branches

@@ -70,6 +70,14 @@ const collegeSchema = new mongoose.Schema({
       type: Number,
       min: 0
     },
+    rounds: [{
+      number: Number,
+      cutoff: cutoffSchema
+    }],
+    cutoff: cutoffSchema // Keep for backward compatibility/quick access
+  }],
+  rounds: [{
+    number: Number,
     cutoff: cutoffSchema
   }],
   cutoff: cutoffSchema,
