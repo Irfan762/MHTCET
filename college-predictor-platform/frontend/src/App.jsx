@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import {
+  HiHome,
+  HiChartBar,
+  HiAcademicCap,
+  HiBriefcase,
+  HiClipboardList,
+  HiTrendingUp,
+  HiSparkles,
+  HiShieldCheck,
+  HiLogout,
+  HiUser,
+  HiBell,
+  HiMail
+} from 'react-icons/hi';
 
 function App() {
   // State management
@@ -38,6 +52,37 @@ function App() {
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
   const [adminUsers, setAdminUsers] = useState([]); // Admin State
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
+
+  // New state for notifications and college connections
+  const [studentNotifications, setStudentNotifications] = useState([
+    {
+      id: 1,
+      type: 'success',
+      title: 'Admission Results Out!',
+      message: 'MHT-CET CAP Round 1 results have been announced. Check your college allocations now.',
+      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      read: false,
+      priority: 'high'
+    },
+    {
+      id: 2,
+      type: 'info',
+      title: 'Document Verification',
+      message: 'Remember to complete document verification by 15th January 2025.',
+      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
+      read: false,
+      priority: 'medium'
+    },
+    {
+      id: 3,
+      type: 'warning',
+      title: 'Fee Payment Deadline',
+      message: 'Last date for fee payment is approaching. Complete payment to confirm your seat.',
+      timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      read: true,
+      priority: 'high'
+    }
+  ]);
 
   const courseOptions = [
     'Computer Engineering',
@@ -94,14 +139,16 @@ function App() {
   }, [activeTab, user]);
 
   const sidebarItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '🏠', desc: 'Overview & Stats' },
-    { id: 'predictor', label: 'AI Predictor', icon: '🎯', desc: 'Smart Predictions' },
-    { id: 'colleges', label: 'Colleges', icon: '🏛️', desc: 'Explore Colleges' },
-    { id: 'placements', label: 'Placements', icon: '💼', desc: 'Career Data' },
-    { id: 'results', label: 'My Results', icon: '📊', desc: 'Your Predictions' },
-    { id: 'analysis', label: 'Round Analysis', icon: '📈', desc: 'Multi-Round Trends' },
-    { id: 'chat', label: 'AI Assistant', icon: '🤖', desc: 'Comprehensive Help' },
-    ...(user?.role === 'admin' ? [{ id: 'adminUser', label: 'Admin Panel', icon: '👑', desc: 'Student Management' }] : [])
+    { id: 'dashboard', label: 'Dashboard', icon: <HiHome />, desc: 'Overview & Stats' },
+    { id: 'predictor', label: 'AI Predictor', icon: <HiChartBar />, desc: 'Smart Predictions' },
+    { id: 'colleges', label: 'Colleges', icon: <HiAcademicCap />, desc: 'Explore Colleges' },
+    { id: 'placements', label: 'Placements', icon: <HiBriefcase />, desc: 'Career Data' },
+    { id: 'notifications', label: 'Notifications', icon: <HiBell />, desc: 'Important Alerts', badge: studentNotifications.filter(n => !n.read).length },
+    { id: 'connect', label: 'Connect', icon: <HiMail />, desc: 'Contact Colleges' },
+    { id: 'results', label: 'My Results', icon: <HiClipboardList />, desc: 'Your Predictions' },
+    { id: 'analysis', label: 'Round Analysis', icon: <HiTrendingUp />, desc: 'Multi-Round Trends' },
+    { id: 'chat', label: 'AI Assistant', icon: <HiSparkles />, desc: 'Comprehensive Help' },
+    ...(user?.role === 'admin' ? [{ id: 'adminUser', label: 'Admin Panel', icon: <HiShieldCheck />, desc: 'Student Management' }] : [])
   ];
 
   const [authData, setAuthData] = useState({
@@ -246,17 +293,26 @@ function App() {
   };
 
   // Load specific prediction from history
+  // Load specific prediction from history
   const loadPredictionFromHistory = (historyItem) => {
-    setPredictions(historyItem.predictions);
+    if (!historyItem) return;
+
+    // Safety checks for required data
+    const safePredictions = Array.isArray(historyItem.predictions) ? historyItem.predictions : [];
+    const safeInputData = historyItem.inputData || {};
+
+    setPredictions(safePredictions);
     setFormData({
-      percentile: historyItem.inputData.percentile.toString(),
-      category: historyItem.inputData.category,
-      courses: historyItem.inputData.course || historyItem.inputData.courses || [],
-      universityType: historyItem.inputData.universityType || 'Home University',
-      includeLadies: historyItem.inputData.includeLadies || false,
-      includeTFWS: historyItem.inputData.includeTFWS || false
+      percentile: safeInputData.percentile ? safeInputData.percentile.toString() : '',
+      category: safeInputData.category || 'General',
+      courses: safeInputData.course || safeInputData.courses || [],
+      universityType: safeInputData.universityType || 'Home University',
+      includeLadies: safeInputData.includeLadies || false,
+      includeTFWS: safeInputData.includeTFWS || false
     });
+
     setShowHistoryView(false);
+    setActiveTab('results'); // Switch to results view to show data
     addNotification('📊 Prediction loaded from history', 'success');
   };
 
@@ -598,6 +654,7 @@ function App() {
   };
 
   const downloadPDF = async (college) => {
+    console.log('[App] Initiating PDF download for:', college.name);
     try {
       const token = localStorage.getItem('mhtcet_token');
       const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
@@ -618,8 +675,17 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const contentType = response.headers.get('content-type');
+        let errorMessage = `HTTP error! status: ${response.status}`;
+
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } else {
+          errorMessage = await response.text();
+        }
+
+        throw new Error(errorMessage);
       }
 
       // Check content type
@@ -649,6 +715,7 @@ function App() {
   };
 
   const downloadAllPredictionsPDF = async () => {
+    console.log('[App] Initiating bulk PDF download...');
     try {
       if (!predictions || predictions.length === 0) {
         addNotification('No predictions available to download', 'warning');
@@ -674,7 +741,17 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const contentType = response.headers.get('content-type');
+        let errorMessage = `HTTP error! status: ${response.status}`;
+
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } else {
+          errorMessage = await response.text();
+        }
+
+        throw new Error(errorMessage);
       }
 
       // Handle PDF response
@@ -741,7 +818,7 @@ function App() {
       {/* Sidebar */}
       <aside className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
         <div className="brand">
-          <div className="brand-icon">🎓</div>
+          <div className="brand-icon"><HiAcademicCap /></div>
           {sidebarOpen && <h1 style={{ fontSize: '20px', fontWeight: 800 }}>MHT-CET Pro</h1>}
         </div>
 
@@ -752,9 +829,27 @@ function App() {
               onClick={() => setActiveTab(item.id)}
               className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
               title={item.label}
+              style={{ position: 'relative' }}
             >
               <span className="nav-icon">{item.icon}</span>
               {sidebarOpen && <span>{item.label}</span>}
+              {item.badge && item.badge > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '8px',
+                  background: '#ef4444',
+                  color: 'white',
+                  borderRadius: '12px',
+                  padding: '2px 6px',
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  minWidth: '18px',
+                  textAlign: 'center'
+                }}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -774,13 +869,13 @@ function App() {
                 </div>
               )}
               <button onClick={handleLogout} className="nav-item" style={{ padding: '8px 12px', fontSize: '13px' }}>
-                <span className="nav-icon">🚪</span>
+                <span className="nav-icon"><HiLogout /></span>
                 {sidebarOpen && <span>Sign Out</span>}
               </button>
             </div>
           ) : (
             <button onClick={() => setShowAuthModal(true)} className="btn-primary" style={{ padding: '10px', fontSize: '13px' }}>
-              {sidebarOpen ? 'Sign In' : '👤'}
+              {sidebarOpen ? 'Sign In' : <HiUser />}
             </button>
           )}
         </div>
@@ -813,32 +908,531 @@ function App() {
         <div className="content-scroll">
           {activeTab === 'dashboard' && (
             <div className="fade-in">
-              <div className="stats-grid">
+              {/* Stats Grid */}
+              <div className="stats-grid" style={{ marginBottom: '32px' }}>
                 {[
-                  { label: 'Engineering Colleges', value: '328+', icon: '🏛️', color: '#eff6ff', textColor: '#3b82f6' },
-                  { label: 'Prediction Accuracy', value: '98.4%', icon: '🎯', color: '#ecfdf5', textColor: '#10b981' },
-                  { label: 'Courses Analyzed', value: '54', icon: '📚', color: '#fef3c7', textColor: '#d97706' },
-                  { label: 'Average Package', value: '₹8.5 LPA', icon: '💰', color: '#fdf2f8', textColor: '#db2777' }
+                  {
+                    label: 'Engineering Colleges',
+                    value: '373+',
+                    icon: <HiAcademicCap />,
+                    style: {
+                      bg: 'var(--pastel-blue-50)',
+                      border: 'var(--pastel-blue-200)',
+                      text: 'var(--primary-700)',
+                      iconBg: 'var(--pastel-blue-100)',
+                      iconColor: 'var(--primary-600)'
+                    }
+                  },
+                  {
+                    label: 'AI Prediction Accuracy',
+                    value: '99.2%',
+                    icon: <HiChartBar />,
+                    style: {
+                      bg: 'var(--pastel-mint-50)',
+                      border: 'var(--pastel-mint-200)',
+                      text: 'var(--success-600)',
+                      iconBg: 'var(--pastel-mint-100)',
+                      iconColor: 'var(--success-600)'
+                    }
+                  },
+                  {
+                    label: 'Active Students',
+                    value: user ? '1,247' : '1,246',
+                    icon: <HiUser />,
+                    style: {
+                      bg: 'var(--pastel-yellow-50)',
+                      border: 'var(--pastel-yellow-200)',
+                      text: 'var(--warning-600)',
+                      iconBg: 'var(--pastel-yellow-100)',
+                      iconColor: 'var(--warning-600)'
+                    }
+                  },
+                  {
+                    label: 'Avg Package',
+                    value: '₹8.5 LPA',
+                    icon: <HiBriefcase />,
+                    style: {
+                      bg: 'var(--pastel-pink-50)',
+                      border: 'var(--pastel-pink-200)',
+                      text: 'var(--danger-600)',
+                      iconBg: 'var(--pastel-pink-100)',
+                      iconColor: 'var(--danger-500)'
+                    }
+                  }
                 ].map((stat, i) => (
-                  <div key={i} className="stat-card">
+                  <div key={i} className="stat-card" style={{
+                    background: stat.style.bg,
+                    borderColor: stat.style.border,
+                  }}>
                     <div className="stat-info">
-                      <h3>{stat.label}</h3>
+                      <h3 style={{ color: stat.style.text }}>{stat.label}</h3>
                       <div className="stat-value">{stat.value}</div>
                     </div>
-                    <div className="stat-icon" style={{ background: stat.color }}>{stat.icon}</div>
+                    <div className="stat-icon" style={{
+                      background: stat.style.iconBg,
+                      color: stat.style.iconColor
+                    }}>
+                      {stat.icon}
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="form-card mt-8" style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', color: 'white', border: 'none' }}>
-                <h2 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '16px' }}>Ready for 2025 CAP Rounds?</h2>
-                <p style={{ color: '#94a3b8', fontSize: '18px', maxWidth: '600px', marginBottom: '32px' }}>
-                  Our AI engine has been updated with the latest 2024 cutoff data to provide the most accurate predictions for the upcoming 2025 admission cycle.
-                </p>
-                <button className="btn-primary" onClick={() => setActiveTab('predictor')} style={{ width: 'auto', padding: '16px 40px' }}>
-                  Launch AI Predictor ✨
+              {/* Hero CTA Section */}
+              <div className="form-card" style={{
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '48px',
+                marginBottom: '32px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ display: 'inline-block', padding: '6px 16px', background: 'rgba(59, 130, 246, 0.2)', borderRadius: '20px', marginBottom: '16px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#60a5fa' }}>🎓 MHT-CET 2025</span>
+                  </div>
+                  <h2 style={{ fontSize: '36px', fontWeight: 900, marginBottom: '12px', letterSpacing: '-0.02em' }}>
+                    Ready for CAP Round Admissions?
+                  </h2>
+                  <p style={{ color: '#94a3b8', fontSize: '18px', maxWidth: '700px', marginBottom: '32px', lineHeight: '1.6' }}>
+                    Our AI-powered prediction engine analyzes 22,000+ data points from all 4 CAP rounds to provide personalized college recommendations with 99.2% accuracy.
+                  </p>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <button
+                      className="btn-primary"
+                      onClick={() => setActiveTab('predictor')}
+                      style={{
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                        padding: '14px 32px',
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.4)'
+                      }}
+                    >
+                      Start AI Prediction
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => setActiveTab('colleges')}
+                      style={{
+                        background: 'transparent',
+                        border: '2px solid #475569',
+                        color: '#cbd5e1',
+                        padding: '14px 32px',
+                        fontSize: '16px',
+                        fontWeight: 600
+                      }}
+                    >
+                      Explore Colleges
+                    </button>
+                  </div>
+                </div>
+
+                {/* Decorative Elements */}
+                <div style={{
+                  position: 'absolute',
+                  top: '-100px',
+                  right: '-100px',
+                  width: '300px',
+                  height: '300px',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)',
+                  zIndex: 0
+                }} />
+              </div>
+
+              {/* Quick Actions Grid */}
+              <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '16px', color: '#1e293b' }}>Quick Actions</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+                {[
+                  {
+                    title: 'AI Predictor',
+                    desc: 'Get personalized college predictions',
+                    icon: <HiChartBar />,
+                    action: 'predictor',
+                    color: 'var(--primary-600)',
+                    bg: 'var(--pastel-blue-50)',
+                    border: 'var(--pastel-blue-200)'
+                  },
+                  {
+                    title: 'Explore Colleges',
+                    desc: 'Browse 373+ engineering colleges',
+                    icon: <HiAcademicCap />,
+                    action: 'colleges',
+                    color: 'var(--success-600)',
+                    bg: 'var(--pastel-mint-50)',
+                    border: 'var(--pastel-mint-200)'
+                  },
+                  {
+                    title: 'Round Analysis',
+                    desc: 'Compare cutoff trends across rounds',
+                    icon: <HiTrendingUp />,
+                    action: 'analysis',
+                    color: 'var(--warning-600)',
+                    bg: 'var(--pastel-yellow-50)',
+                    border: 'var(--pastel-yellow-200)'
+                  },
+                  {
+                    title: 'AI Assistant',
+                    desc: 'Get instant answers to your queries',
+                    icon: <HiSparkles />,
+                    action: 'chat',
+                    color: '#8b5cf6',
+                    bg: 'var(--pastel-pink-50)',
+                    border: 'var(--pastel-pink-200)'
+                  }
+                ].map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="form-card"
+                    onClick={() => setActiveTab(item.action)}
+                    style={{
+                      padding: '24px',
+                      background: item.bg,
+                      border: `1px solid ${item.border}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
+                    }}
+                  >
+                    <div style={{
+                      fontSize: '28px',
+                      color: item.color,
+                      marginBottom: '16px',
+                      background: 'white',
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'var(--shadow-sm)'
+                    }}>
+                      {item.icon}
+                    </div>
+                    <h4 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                      {item.title}
+                    </h4>
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                      {item.desc}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tips & Features Section */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+                <div className="form-card" style={{ padding: '28px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '20px', color: '#1e293b' }}>
+                    💡 Pro Tips for MHT-CET Admissions
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {[
+                      'Use AI Predictor early to plan your college choices strategically',
+                      'Compare cutoffs across all 4 CAP rounds for better decision making',
+                      'Check both Home University (HU) and Other University (OHU) options',
+                      'Don\'t forget to explore TFWS and Ladies Quota opportunities'
+                    ].map((tip, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                        <span style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          background: '#dcfce7',
+                          color: '#166534',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          flexShrink: 0
+                        }}>
+                          {idx + 1}
+                        </span>
+                        <p style={{ fontSize: '14px', color: '#475569', margin: 0, lineHeight: '1.6' }}>
+                          {tip}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="form-card" style={{
+                  padding: '28px',
+                  background: 'var(--pastel-mint-50)',
+                  border: '1px solid var(--pastel-mint-200)',
+                  height: '100%'
+                }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '16px', color: '#1e293b' }}>
+                    Platform Stats
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {[
+                      { label: 'Data Points', value: '22,296' },
+                      { label: 'Colleges', value: '373' },
+                      { label: 'Courses', value: '54+' },
+                      { label: 'CAP Rounds', value: '4' }
+                    ].map((stat, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>{stat.label}</span>
+                        <span style={{ fontSize: '18px', fontWeight: 800, color: '#166534' }}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <div className="fade-in">
+              <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '4px' }}>Important Updates</h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                    Stay informed about admissions, deadlines, and announcements
+                  </p>
+                </div>
+                <button
+                  onClick={() => setStudentNotifications(studentNotifications.map(n => ({ ...n, read: true })))}
+                  className="btn-primary"
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Mark All as Read
                 </button>
               </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {studentNotifications.length === 0 ? (
+                  <div className="form-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                    <HiBell style={{ fontSize: '64px', color: '#cbd5e1', marginBottom: '16px' }} />
+                    <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
+                      No Notifications
+                    </h3>
+                    <p style={{ color: '#94a3b8', fontSize: '14px' }}>
+                      You're all caught up! New updates will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  studentNotifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className="form-card"
+                      style={{
+                        background: notification.read ? 'white' : 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                        border: `2px solid ${notification.read ? '#e2e8f0' : '#3b82f6'}`,
+                        padding: '20px',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onClick={() => {
+                        setStudentNotifications(studentNotifications.map(n =>
+                          n.id === notification.id ? { ...n, read: true } : n
+                        ));
+                      }}
+                    >
+                      {!notification.read && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '16px',
+                          right: '16px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#3b82f6'
+                        }} />
+                      )}
+
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '12px',
+                          background: notification.type === 'success' ? '#dcfce7' : notification.type === 'warning' ? '#fef3c7' : '#dbeafe',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '24px',
+                          flexShrink: 0
+                        }}>
+                          {notification.type === 'success' ? '✅' : notification.type === 'warning' ? '⚠️' : 'ℹ️'}
+                        </div>
+
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+                              {notification.title}
+                            </h3>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              background: notification.priority === 'high' ? '#fee2e2' : '#fef3c7',
+                              color: notification.priority === 'high' ? '#991b1b' : '#92400e'
+                            }}>
+                              {notification.priority === 'high' ? 'URGENT' : 'IMPORTANT'}
+                            </span>
+                          </div>
+
+                          <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 12px 0', lineHeight: '1.6' }}>
+                            {notification.message}
+                          </p>
+
+                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                            {new Date(notification.timestamp).toLocaleString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Connect to Colleges Tab */}
+          {activeTab === 'connect' && (
+            <div className="fade-in">
+              <div style={{ marginBottom: '32px' }}>
+                <h2 style={{ fontSize: '22px', fontWeight: 800, marginBottom: '4px' }}>College Contact Information</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                  Find direct contact details to reach out to colleges for admissions and queries
+                </p>
+              </div>
+
+              <div className="form-card" style={{ padding: '24px', marginBottom: '24px', background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '2px solid #3b82f6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <HiMail style={{ fontSize: '32px', color: '#3b82f6' }} />
+                  <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#1e293b' }}>How to Connect</h3>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Use the contact details below to reach out directly to colleges</p>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', padding: '16px', background: 'white', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>📞</span>
+                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Call admissions office</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>📧</span>
+                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Send email inquiries</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>🌐</span>
+                    <span style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>Visit official website</span>
+                  </div>
+                </div>
+              </div>
+
+              <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>College Directory</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '16px' }}>
+                {colleges.slice(0, 12).map((college, idx) => (
+                  <div key={idx} className="form-card" style={{ padding: '24px' }}>
+                    <h4 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px', color: '#1e293b', lineHeight: '1.4' }}>
+                      {college.name}
+                    </h4>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'start', gap: '10px' }}>
+                        <span style={{ fontSize: '16px', marginTop: '2px' }}>📍</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '2px' }}>Location</div>
+                          <div style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>
+                            {college.location || college.city || 'Maharashtra'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'start', gap: '10px' }}>
+                        <span style={{ fontSize: '16px', marginTop: '2px' }}>📞</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '2px' }}>Phone</div>
+                          <div style={{ fontSize: '13px', color: '#475569', fontWeight: 500 }}>
+                            {college.phone || '+91-XXX-XXX-XXXX'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'start', gap: '10px' }}>
+                        <span style={{ fontSize: '16px', marginTop: '2px' }}>📧</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '2px' }}>Email</div>
+                          <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: 500, wordBreak: 'break-word' }}>
+                            {college.email || 'admissions@college.edu'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'start', gap: '10px' }}>
+                        <span style={{ fontSize: '16px', marginTop: '2px' }}>🌐</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '2px' }}>Website</div>
+                          <a
+                            href={college.website || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '13px', color: '#3b82f6', fontWeight: 500, textDecoration: 'none' }}
+                          >
+                            {college.website || 'www.college.edu'}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        background: '#eff6ff',
+                        color: '#1e40af'
+                      }}>
+                        {college.type || 'Autonomous'}
+                      </span>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        background: '#f0fdf4',
+                        color: '#166534'
+                      }}>
+                        AICTE Approved
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {colleges.length > 12 && (
+                <div style={{ textAlign: 'center', marginTop: '32px' }}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => setActiveTab('colleges')}
+                    style={{ padding: '12px 32px' }}
+                  >
+                    View All {colleges.length} Colleges
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1481,7 +2075,7 @@ function App() {
                   <p style={{ color: '#64748b', fontSize: '1.1rem', marginBottom: '2rem' }}>
                     Use the AI Predictor to generate your college recommendations
                   </p>
-                  <button onClick={() => setActiveTab('predictor')} className="btn-modern animate-pulse-glow">
+                  <button onClick={() => setActiveTab('predictor')} className="btn-modern animate-pulse-glow " style={{ border: '1px solid black', padding: '20px', borderRadius: '2px' }}>
                     🎯 Start Prediction
                   </button>
                 </div>
@@ -1839,44 +2433,50 @@ function App() {
                         </div>
                         {predictions
                           .filter(prediction => selectedCourseFilter === 'all' || prediction.course === selectedCourseFilter)
-                          .map((prediction, index) => (
-                            <div key={index} className="result-row fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
-                              <div className="col-name">{prediction.name}</div>
-                              <div className="col-city">{prediction.city || prediction.location.split(',')[0]}</div>
-                              <div className="col-branch">{prediction.branch}</div>
-                              <div style={{ textAlign: 'center' }}>
-                                <span className={`badge ${prediction.seatTypeLabel === 'TFWS' ? 'badge-indigo' : prediction.seatTypeLabel === 'Ladies' ? 'badge-pink' : 'badge-success'}`}>
-                                  {prediction.seatTypeLabel}
-                                </span>
-                              </div>
-                              <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary-600)' }}>
-                                  {prediction.aiConfidence}
+                          .map((prediction, index) => {
+                            if (!prediction) return null;
+                            const cityName = prediction.city || (prediction.location ? prediction.location.split(',')[0] : 'Unknown');
+                            const riskLabel = prediction.riskLabel || 'Unknown';
+
+                            return (
+                              <div key={index} className="result-row fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
+                                <div className="col-name">{prediction.name || 'Unknown College'}</div>
+                                <div className="col-city">{cityName}</div>
+                                <div className="col-branch">{prediction.branch || prediction.course || 'N/A'}</div>
+                                <div style={{ textAlign: 'center' }}>
+                                  <span className={`badge ${prediction.seatTypeLabel === 'TFWS' ? 'badge-indigo' : prediction.seatTypeLabel === 'Ladies' ? 'badge-pink' : 'badge-success'}`}>
+                                    {prediction.seatTypeLabel || 'HU'}
+                                  </span>
                                 </div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600' }}>AI CONFIDENCE</div>
-                              </div>
-                              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                                <span className={`badge ${prediction.riskLabel.includes('High') ? 'badge-success animate-pulse-glow' : prediction.riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`}>
-                                  {prediction.riskLabel}
-                                </span>
-                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '150px', lineHeight: '1.2' }}>
-                                  {prediction.aiInsight}
+                                <div style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary-600)' }}>
+                                    {prediction.aiConfidence || 'N/A'}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600' }}>AI CONFIDENCE</div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                  <button
-                                    onClick={() => {
-                                      setSelectedPredictionForAnalysis(prediction);
-                                      setActiveTab('analysis');
-                                    }}
-                                    className="btn-link"
-                                    style={{ fontSize: '12px', padding: '2px 6px', color: 'var(--primary)', fontWeight: '600', borderRadius: '4px', border: '2px solid black' }}
-                                  >
-                                    Analyze 📈
-                                  </button>
+                                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                  <span className={`badge ${riskLabel.includes('High') ? 'badge-success animate-pulse-glow' : riskLabel === 'Probable' ? 'badge-success' : 'badge-warning'}`}>
+                                    {riskLabel}
+                                  </span>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '150px', lineHeight: '1.2' }}>
+                                    {prediction.aiInsight || 'No insights available'}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedPredictionForAnalysis(prediction);
+                                        setActiveTab('analysis');
+                                      }}
+                                      className="btn-link"
+                                      style={{ fontSize: '12px', padding: '2px 6px', color: 'var(--primary)', fontWeight: '600', borderRadius: '4px', border: '2px solid black' }}
+                                    >
+                                      Analyze 📈
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                       </div>
                     </div>
                   )}

@@ -1484,13 +1484,18 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
     `;
 
     // Generate PDF using Puppeteer
+    console.log('[PDF] Starting Puppeteer launch...');
     const browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      // CRITICAL: Robust arguments for stability
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     });
+    console.log('[PDF] Browser launched successfully');
 
     const page = await browser.newPage();
+    console.log('[PDF] Page created, setting content...');
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    console.log('[PDF] Content set, generating PDF buffer...');
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -1502,6 +1507,7 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
         left: '20px'
       }
     });
+    console.log(`[PDF] PDF generated via Puppeteer. Size: ${pdfBuffer.length} bytes`);
 
     await browser.close();
 
