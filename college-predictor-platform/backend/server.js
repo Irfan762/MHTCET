@@ -166,11 +166,45 @@ app.get('/api/admin/users', authenticate, authorize('admin'), async (req, res) =
   try {
     const users = await User.find()
       .select('-password') // Exclude password
+      .populate('predictions', 'createdAt inputData predictions') // Include prediction data
       .sort({ createdAt: -1 }); // Newest first
+
+    // Enhance user data with statistics
+    const enhancedUsers = users.map(user => {
+      const userObj = user.toObject();
+      
+      // Calculate prediction statistics
+      const predictions = userObj.predictions || [];
+      const totalPredictions = predictions.length;
+      const lastPrediction = predictions.length > 0 ? predictions[predictions.length - 1].createdAt : null;
+      
+      // Calculate total colleges predicted
+      let totalColleges = 0;
+      predictions.forEach(pred => {
+        if (pred.predictions && Array.isArray(pred.predictions)) {
+          totalColleges += pred.predictions.length;
+        }
+      });
+
+      return {
+        ...userObj,
+        stats: {
+          totalPredictions,
+          totalColleges,
+          lastPrediction,
+          isActive: user.isActive,
+          daysSinceJoined: Math.floor((Date.now() - new Date(user.createdAt)) / (1000 * 60 * 60 * 24))
+        }
+      };
+    });
 
     res.json({
       success: true,
-      users
+      users: enhancedUsers,
+      totalUsers: enhancedUsers.length,
+      activeUsers: enhancedUsers.filter(u => u.isActive).length,
+      studentsCount: enhancedUsers.filter(u => u.role === 'student').length,
+      adminsCount: enhancedUsers.filter(u => u.role === 'admin').length
     });
   } catch (error) {
     res.status(500).json({

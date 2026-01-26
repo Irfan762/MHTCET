@@ -11,7 +11,6 @@ const runSeeder = async () => {
         console.log('✅ Connected to MongoDB');
 
         await seedColleges();
-
         console.log('🏁 Seeding completed successfully');
         process.exit(0);
     } catch (error) {
