@@ -18,7 +18,8 @@ const ChatWidget = ({
   onDeleteSession,
   onDeleteAll,
   showHistory,
-  setShowHistory
+  setShowHistory,
+  isIntelligence = false
 }) => {
   const messagesEndRef = useRef(null);
 
@@ -107,24 +108,44 @@ const ChatWidget = ({
                 <Sparkles size={20} />
               </div>
               <div>
-                <CardTitle className="text-lg">MHT-CET Intelligence Assistant</CardTitle>
+                <CardTitle className="text-lg">
+                  {isIntelligence ? 'MHT-CET Intelligence Assistant' : 'AI Helpdesk'}
+                </CardTitle>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Active Neural Engine</span>
+                  <span className={cn(
+                    "w-2 h-2 rounded-full",
+                    isIntelligence ? "bg-purple-500 animate-pulse" : "bg-emerald-500"
+                  )} />
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-widest",
+                    isIntelligence ? "text-purple-600" : "text-emerald-600"
+                  )}>
+                    {isIntelligence ? 'Privacy-Shield Active (No Logs)' : 'Support Online'}
+                  </span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setShowHistory(!showHistory)}
-                className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"
-                title="Toggle History"
-              >
-                <History size={20} />
-              </button>
-              <button className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                <Maximize2 size={20} />
-              </button>
+              {!isIntelligence && (
+                <>
+                  <button 
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors"
+                    title="Toggle History"
+                  >
+                    <History size={20} />
+                  </button>
+                  <button className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                    <Maximize2 size={20} />
+                  </button>
+                </>
+              )}
+              {isIntelligence && (
+                <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 text-[10px] font-900 uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                  Encrypted & Stateless
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>

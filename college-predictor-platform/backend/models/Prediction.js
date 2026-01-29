@@ -55,7 +55,7 @@ const predictionSchema = new mongoose.Schema({
     course: String,
     probability: {
       type: String,
-      enum: ['High', 'Medium', 'Low', 'Probable', 'Borderline', 'Safe', 'Difficult', 'Very High Chance'],
+      enum: ['High', 'Medium', 'Low', 'Probable', 'Borderline', 'Safe', 'Difficult', 'Very High Chance', 'Ambitious', 'Very Probable', 'Safe Chance'],
       required: true
     },
     admissionChance: Number,

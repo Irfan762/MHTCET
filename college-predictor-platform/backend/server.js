@@ -515,12 +515,22 @@ app.get('/api/colleges', optionalAuth, async (req, res) => {
 
     // Transform data for frontend compatibility
     const transformedColleges = colleges.map(college => ({
-      id: college._id,
+      _id: college._id,
       name: college.name,
       location: college.location,
       city: college.city,
       type: college.type,
-      courses: college.courses.map(c => c.name),
+      autonomous: college.type === 'Autonomous',
+      establishedYear: college.establishedYear,
+      courses: college.courses.map(c => ({
+        name: c.name,
+        intake: c.intake,
+        rounds: c.rounds.map(r => ({
+          round: r.number,
+          cutoff: r.cutoff?.general || r.cutoff?.tfws || 0,
+          seatType: r.cutoff?.tfws ? 'TFWS' : 'General'
+        }))
+      })),
       cutoff: college.cutoff,
       fees: college.fees.formatted,
       placements: {
@@ -604,9 +614,11 @@ app.get('/api/colleges/:id/rounds', async (req, res) => {
 app.post('/api/predictions', optionalAuth, async (req, res) => {
   try {
     const { percentile, category, courses, universityType, includeLadies, includeTFWS } = req.body;
+    console.log('[Prediction] Request received:', { percentile, category, courses, universityType, includeLadies, includeTFWS });
 
     // Validation
     if (!percentile || !category || !courses || !Array.isArray(courses) || courses.length === 0) {
+      console.log('[Prediction] Validation failed: Missing fields');
       return res.status(400).json({
         success: false,
         message: 'Please provide percentile, category, and at least one course'
@@ -625,17 +637,18 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
     const allPredictions = [];
     const courseResults = {};
 
-    // Category mapping for backend keys
+    // Category mapping for backend keys (Updated to match frontend exactly)
     const categoryMap = {
       'General': 'general',
       'OBC': 'obc',
       'SC': 'sc',
       'ST': 'st',
-      'VJNT': 'vjnt',
-      'NT1': 'nt1',
-      'NT2': 'nt2',
-      'NT3': 'nt3',
+      'VJ/DT(A)': 'vjnt',
+      'NT(B)': 'nt1',
+      'NT(C)': 'nt2',
+      'NT(D)': 'nt3',
       'EWS': 'ews',
+      'SBC': 'obc', // SBC usually matches OBC cutoffs in many instances
       'SEBC': 'sebc',
       'TFWS': 'tfws'
     };
@@ -643,11 +656,17 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
     const targetCategory = categoryMap[category] || 'general';
 
     for (const course of courses) {
-      // Find colleges offering this course
-      const colleges = await College.find({
+      // Build query with city filter if applicable
+      const query = {
         isActive: true,
-        'courses.name': new RegExp(course.split(' ')[0], 'i')
-      }).lean();
+        'courses.name': { $regex: new RegExp(course.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }
+      };
+
+      if (req.body.city && req.body.city !== 'All Cities') {
+        query.city = { $regex: new RegExp(req.body.city, 'i') };
+      }
+
+      const colleges = await College.find(query).lean();
 
       const coursePredictions = colleges.map(college => {
         // Find the specific course branch
@@ -686,7 +705,7 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
           }
 
           return { round: r.number, cutoff, seatType };
-        }).filter(r => r.cutoff !== null);
+        }).filter(r => r.cutoff !== null && r.cutoff !== undefined);
 
         if (roundInterpretations.length === 0) return null;
 
@@ -698,11 +717,11 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
           return (prev.cutoff < curr.cutoff) ? prev : curr;
         });
 
-        // If college is too competitive (Cutoff > User + 2), skip it
-        if (bestRound.cutoff > userPercentile + 2.5) return null;
+        // If college is too competitive (Cutoff > User + 5), skip it
+        if (bestRound.cutoff > userPercentile + 5) return null;
         
-        // If college is too easy (Cutoff < User - 20), skip it to keep results relevant
-        if (bestRound.cutoff < userPercentile - 20 && colleges.length > 30) return null;
+        // If college is too easy (Cutoff < User - 30), skip it to keep results relevant
+        if (bestRound.cutoff < userPercentile - 30 && colleges.length > 50) return null;
 
         const cutoffValue = bestRound.cutoff;
         const difference = parseFloat((userPercentile - cutoffValue).toFixed(2));
@@ -716,7 +735,7 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
           probability = "Safe";
         } else if (difference >= 1.0) {
           admissionChance = 90;
-          probability = "Very Probable";
+          probability = "Probable";
         } else if (difference >= 0) {
           admissionChance = 75;
           probability = "Probable";
@@ -753,6 +772,8 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
           aiConfidence: "99.2%",
           aiInsight,
           trendScore: totalTrend.toFixed(2),
+          allRounds: sortedRounds,
+          bestMatchingRound: bestRound.round,
           fees: college.fees.formatted,
           placements: {
             averagePackage: college.placements.averagePackage.formatted,
@@ -766,19 +787,11 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
 
       if (coursePredictions.length > 0) {
         coursePredictions.sort((a, b) => b.cutoffForCategory - a.cutoffForCategory);
+        // Assign ranks within this course selection
+        coursePredictions.forEach((p, idx) => p.rank = idx + 1);
+        
         courseResults[course] = coursePredictions;
         allPredictions.push(...coursePredictions);
-      }
-    }
-
-          // Assign ranks within this selection
-          coursePredictions.forEach((p, idx) => p.rank = idx + 1);
-
-          courseResults[course] = coursePredictions;
-          allPredictions.push(...coursePredictions);
-        } else {
-          courseResults[course] = [];
-        }
       }
     }
 
@@ -823,12 +836,12 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
         },
         predictions: allPredictions.map(p => ({
           college: p.college,
-          course: p.course,
+          course: p.branch,
           probability: p.probability,
           admissionChance: p.admissionChance,
           riskLabel: p.riskLabel,
           cutoffForCategory: p.cutoffForCategory,
-          adjustedCutoff: p.adjustedCutoff,
+          adjustedCutoff: p.adjustedCutoff || 0,
           difference: p.difference,
           rank: p.rank,
           fees: p.fees,
@@ -854,11 +867,12 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
       inputParams: { percentile, category, courses, universityType }
     });
   } catch (error) {
-    console.error('Prediction error:', error);
+    console.error('[Prediction] CRITICAL ERROR:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to generate accurate predictions',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -1080,8 +1094,10 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
       }
     }
 
-    // Save chat message if user is authenticated and sessionId is provided
-    if (req.user && sessionId) {
+    // Save chat message if user is authenticated, sessionId is provided and storeHistory is not explicitly false
+    const storeHistory = req.body.storeHistory !== false;
+    
+    if (req.user && sessionId && storeHistory) {
       try {
         let chatDoc = await ChatMessage.findOne({
           user: req.user._id,

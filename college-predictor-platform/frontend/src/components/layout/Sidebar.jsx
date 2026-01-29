@@ -41,7 +41,8 @@ const Sidebar = ({
     { id: 'connect', label: 'Connect', icon: <Mail size={20} />, desc: 'Contact Colleges' },
     { id: 'results', label: 'My Results', icon: <ClipboardList size={20} />, desc: 'Your Predictions' },
     { id: 'analysis', label: 'Round Analysis', icon: <TrendingUp size={20} />, desc: 'Multi-Round Trends' },
-    { id: 'chat', label: 'AI Assistant', icon: <Sparkles size={20} />, desc: 'Comprehensive Help' },
+    { id: 'intelligence', label: 'Intelligence Assistant', icon: <Sparkles size={20} />, desc: 'Privacy-First AI' },
+    { id: 'chat', label: 'AI Help', icon: <Mail size={20} />, desc: 'General Support' },
     ...(user?.role === 'admin' ? [{ id: 'adminUser', label: 'Admin Panel', icon: <ShieldCheck size={20} />, desc: 'Student Management' }] : [])
   ];
 

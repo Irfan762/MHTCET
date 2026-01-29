@@ -102,6 +102,7 @@
     --accent-rose: #f43f5e;
     --accent-teal: #14b8a6;
     --accent-violet: #8b5cf6;
+    --accent-purple: #a855f7;
 
     --surface-primary: #ffffff;
     --surface-secondary: #f8fafc;
@@ -110,11 +111,13 @@
     --surface-amber: #fffbeb;
     --surface-rose: #fff1f2;
     --surface-teal: #f0fdfa;
+    --surface-purple: #f5f3ff;
 
     --border-indigo: #e0e7ff;
     --border-emerald: #d1fae5;
     --border-amber: #fef3c7;
     --border-teal: #ccfbf1;
+    --border-purple: #e9d5ff;
 
     /* Spacing Scale */
     --space-px: 1px;

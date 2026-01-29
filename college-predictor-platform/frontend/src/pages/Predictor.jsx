@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import PredictorForm from '../components/predictor/PredictorForm';
 import ResultCard from '../components/predictor/ResultCard';
+import DetailsModal from '../components/predictor/DetailsModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Filter, Download, Trash2, ArrowRight, LayoutGrid, List } from 'lucide-react';
 import { Button } from '../components/common/Button';
@@ -16,6 +17,13 @@ const Predictor = ({
   courseOptions 
 }) => {
   const [viewMode, setViewMode] = useState('grid');
+  const [selectedCollege, setSelectedCollege] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleShowDetails = (college) => {
+    setSelectedCollege({ ...college, percentile: formData.percentile });
+    setIsModalOpen(true);
+  };
   
   return (
     <div className="space-y-12">
@@ -97,7 +105,7 @@ const Predictor = ({
                   key={index} 
                   prediction={prediction} 
                   onDownloadPDF={onDownloadPDF}
-                  onShowDetails={() => {}}
+                  onShowDetails={handleShowDetails}
                 />
               ))}
             </div>
@@ -126,6 +134,17 @@ const Predictor = ({
           </div>
         </section>
       )}
+
+      {/* Details Modal Pop-up */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <DetailsModal 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
+            prediction={selectedCollege} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../co
 import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import { Button } from '../components/common/Button';
+import DetailsModal from '../components/predictor/DetailsModal';
 import { 
   Search, 
   MapPin, 
@@ -14,12 +15,14 @@ import {
   ExternalLink,
   Info
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils/cn';
 
 const Colleges = ({ colleges }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cityFilter, setCityFilter] = useState('All Cities');
+  const [selectedCollege, setSelectedCollege] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   const cities = useMemo(() => {
     const list = new Set(colleges.map(c => c.city || c.location).filter(Boolean));
@@ -34,6 +37,11 @@ const Colleges = ({ colleges }) => {
       return matchesSearch && matchesCity;
     });
   }, [colleges, searchTerm, cityFilter]);
+
+  const handleShowDetails = (college) => {
+    setSelectedCollege(college);
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="space-y-10">
@@ -81,11 +89,11 @@ const Colleges = ({ colleges }) => {
                 )}
                 
                 <div className="flex items-start gap-4 pr-20">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors shrink-0">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
                     <School size={24} />
                   </div>
                   <div className="space-y-1">
-                    <h4 className="font-800 text-slate-900 line-clamp-2 tracking-tight leading-snug group-hover:text-indigo-600 transition-colors">
+                    <h4 className="font-800 text-slate-900 line-clamp-2 tracking-tight leading-snug group-hover:text-indigo-600 transition-colors uppercase italic">
                       {college.name}
                     </h4>
                     <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
@@ -102,11 +110,11 @@ const Colleges = ({ colleges }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none italic">Est. Year</p>
-                    <p className="text-sm font-800 text-slate-700 uppercase tracking-tight italic">{college.establishedIn || 'N/A'}</p>
+                    <p className="text-sm font-800 text-slate-700 uppercase tracking-tight italic">{college.establishedYear || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none italic">Cutoff Range</p>
-                    <p className="text-sm font-800 text-indigo-600 uppercase tracking-tight italic">{college.cutoffHigh ? `${college.cutoffLow}-${college.cutoffHigh}` : 'Expert Only'}</p>
+                    <p className="text-sm font-800 text-indigo-600 uppercase tracking-tight italic">{college.cutoff?.low ? `${college.cutoff.low}-${college.cutoff.high}` : 'Expert Only'}</p>
                   </div>
                 </div>
 
@@ -121,7 +129,12 @@ const Colleges = ({ colleges }) => {
               </div>
 
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
-                <Button variant="ghost" size="sm" className="flex-1 rounded-xl font-bold uppercase tracking-widest text-[10px] py-3 italic">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="flex-1 rounded-xl font-bold uppercase tracking-widest text-[10px] py-3 italic"
+                  onClick={() => handleShowDetails(college)}
+                >
                   Details <Info className="ml-1.5" size={12} />
                 </Button>
                 <Button variant="primary" size="sm" className="flex-1 rounded-xl shadow-indigo-600/10 h-10 italic">
@@ -142,6 +155,17 @@ const Colleges = ({ colleges }) => {
           <p className="text-sm font-medium text-slate-500 italic uppercase tracking-widest mt-2 px-10">Adjust your search parameters to discover other premier institutions.</p>
         </div>
       )}
+
+      {/* Details Modal Pop-up */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <DetailsModal 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
+            prediction={selectedCollege} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

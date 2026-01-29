@@ -11,15 +11,20 @@ export const useAppLogic = () => {
   const [authMode, setAuthMode] = useState('login');
   const [notifications, setNotifications] = useState([]);
   
-  // Chat states
-  const [chatMessages, setChatMessages] = useState([
+  // Intelligence Assistant states (Ephemeral)
+  const [intelligenceMessages, setIntelligenceMessages] = useState([
     {
       id: 1,
       type: 'bot',
-      message: '🎓 Welcome to MHT-CET Pro Intelligence. I am your strategic advisor for Maharashtra engineering admissions. How can I assist you with institution mapping or cutoff trends today?',
+      message: '🧠 **MHT-CET Intelligence Assistant Active**\n\nI am your advanced strategic advisor. This session is operating in **High-Privacy Mode**—no chat logs are being stored in our database.\n\nHow can I analyze your admission strategy today?',
       timestamp: new Date()
     }
   ]);
+  const [intelligenceInput, setIntelligenceInput] = useState('');
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+
+  // Legacy Chat states (Keeping for compatibility or separate history if needed)
+  const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatSessionId, setChatSessionId] = useState(null);
@@ -150,6 +155,53 @@ export const useAppLogic = () => {
     }
   };
 
+  const handleIntelligenceChatSend = async () => {
+    if (!intelligenceInput.trim()) return;
+    
+    // We allow usage without login if needed, or enforce it
+    const userMsg = { id: Date.now(), type: 'user', message: intelligenceInput, timestamp: new Date() };
+    setIntelligenceMessages(prev => [...prev, userMsg]);
+    const input = intelligenceInput;
+    setIntelligenceInput('');
+    setIntelligenceLoading(true);
+
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const response = await fetch('http://127.0.0.1:3001/api/chat', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          message: input,
+          sessionId: `ephemeral_${Date.now()}`,
+          storeHistory: false, // CRITICAL: Do not store history
+          context: {
+            currentSection: 'intelligence-assistant',
+            userCategory: formData.category,
+            userPercentile: formData.percentile,
+            userCourses: formData.courses
+          }
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIntelligenceMessages(prev => [...prev, { 
+          id: Date.now() + 1, 
+          type: 'bot', 
+          message: data.response, 
+          timestamp: new Date() 
+        }]);
+      }
+    } catch (error) {
+      addNotification('Intelligence engine connection lost', 'error');
+    } finally {
+      setIntelligenceLoading(false);
+    }
+  };
+
   const handleChatSend = async () => {
     if (!chatInput.trim()) return;
     if (!user) {
@@ -266,6 +318,48 @@ export const useAppLogic = () => {
     }
   };
 
+  const downloadAllPDF = async () => {
+    if (!predictions || predictions.length === 0) {
+      addNotification('No predictions to export', 'warning');
+      return;
+    }
+
+    addNotification('Generating comprehensive report...', 'info');
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3001/api/generate-pdf', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || 'temp-token'}`
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          predictions: predictions,
+          studentInfo: { ...formData, name: user?.name || 'Guest User' }
+        }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `MHT-CET-Complete-Report-${formData.percentile}-${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        addNotification(`✅ Successfully exported ${predictions.length} predictions`, 'success');
+      } else {
+        addNotification('PDF generation failed', 'error');
+      }
+    } catch (error) {
+      console.error('Download all error:', error);
+      addNotification('Export failed - please try again', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchColleges();
     const savedUser = localStorage.getItem('mhtcet_user');
@@ -361,9 +455,10 @@ export const useAppLogic = () => {
     formData, setFormData,
     courseOptions,
     chatMessages, chatInput, setChatInput, chatLoading,
+    intelligenceMessages, intelligenceInput, setIntelligenceInput, intelligenceLoading,
     adminUsers,
     deletePrediction, deleteAllPredictions, loadPredictionFromHistory,
-    handleAuth, handleLogout, handlePredict, handleChatSend, downloadPDF, downloadHistoryPDF,
+    handleAuth, handleLogout, handlePredict, handleChatSend, handleIntelligenceChatSend, downloadPDF, downloadHistoryPDF, downloadAllPDF,
     addNotification
   };
 };

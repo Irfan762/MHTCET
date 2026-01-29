@@ -33,9 +33,10 @@ function App() {
     formData, setFormData,
     courseOptions,
     chatMessages, chatInput, setChatInput, chatLoading,
+    intelligenceMessages, intelligenceInput, setIntelligenceInput, intelligenceLoading,
     adminUsers,
     deletePrediction, deleteAllPredictions, loadPredictionFromHistory,
-    handleAuth, handleLogout, handlePredict, handleChatSend, downloadPDF, downloadHistoryPDF,
+    handleAuth, handleLogout, handlePredict, handleChatSend, handleIntelligenceChatSend, downloadPDF, downloadHistoryPDF, downloadAllPDF,
     addNotification
   } = useAppLogic();
 
@@ -60,7 +61,7 @@ function App() {
             loading={loading}
             onPredict={handlePredict}
             onDownloadPDF={downloadPDF}
-            onDownloadAll={() => addNotification('Batch export coming soon', 'info')}
+            onDownloadAll={downloadAllPDF}
             courseOptions={courseOptions}
           />
         );
@@ -84,6 +85,25 @@ function App() {
         );
       case 'analysis':
         return <Analysis />;
+      case 'intelligence':
+        return (
+          <ChatWidget 
+            messages={intelligenceMessages}
+            input={intelligenceInput}
+            setInput={setIntelligenceInput}
+            onSend={handleIntelligenceChatSend}
+            loading={intelligenceLoading}
+            sessions={[]} 
+            currentSessionId={null}
+            onNewChat={() => {}}
+            onLoadSession={() => {}}
+            onDeleteSession={() => {}}
+            onDeleteAll={() => {}}
+            showHistory={false}
+            setShowHistory={() => {}}
+            isIntelligence={true}
+          />
+        );
       case 'chat':
         return (
           <ChatWidget 

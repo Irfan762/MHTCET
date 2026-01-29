@@ -33,8 +33,10 @@ const Layout = ({
         return { title: 'My Results', subtitle: 'Your personalized prediction repository' };
       case 'analysis':
         return { title: 'Round Analysis', subtitle: 'Multi-round cutoff trend intelligence' };
+      case 'intelligence':
+        return { title: 'Intelligence Assistant', subtitle: 'Advanced, privacy-focused admission advisor' };
       case 'chat':
-        return { title: 'AI Assistant', subtitle: 'Expert guidance for your engineering questions' };
+        return { title: 'AI Helpdesk', subtitle: 'Questions regarding the platform and admissions' };
       case 'adminUser':
         return { title: 'Admin Panel', subtitle: 'Institutional student management dashboard' };
       default:
