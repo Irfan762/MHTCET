@@ -34,9 +34,11 @@ function App() {
     courseOptions,
     chatMessages, chatInput, setChatInput, chatLoading,
     intelligenceMessages, intelligenceInput, setIntelligenceInput, intelligenceLoading,
+    intelligenceHistory, intelligenceSessionId,
     adminUsers,
     deletePrediction, deleteAllPredictions, loadPredictionFromHistory,
     handleAuth, handleLogout, handlePredict, handleChatSend, handleIntelligenceChatSend, downloadPDF, downloadHistoryPDF, downloadAllPDF,
+    startNewIntelligenceChat, loadIntelligenceSession, deleteIntelligenceSession,
     addNotification
   } = useAppLogic();
 
@@ -93,33 +95,15 @@ function App() {
             setInput={setIntelligenceInput}
             onSend={handleIntelligenceChatSend}
             loading={intelligenceLoading}
-            sessions={[]} 
-            currentSessionId={null}
-            onNewChat={() => {}}
-            onLoadSession={() => {}}
-            onDeleteSession={() => {}}
-            onDeleteAll={() => {}}
-            showHistory={false}
+            sessions={intelligenceHistory} 
+            currentSessionId={intelligenceSessionId}
+            onNewChat={startNewIntelligenceChat}
+            onLoadSession={loadIntelligenceSession}
+            onDeleteSession={deleteIntelligenceSession}
+            onDeleteAll={() => addNotification('Clear all history coming soon', 'info')}
+            showHistory={true}
             setShowHistory={() => {}}
             isIntelligence={true}
-          />
-        );
-      case 'chat':
-        return (
-          <ChatWidget 
-            messages={chatMessages}
-            input={chatInput}
-            setInput={setChatInput}
-            onSend={handleChatSend}
-            loading={chatLoading}
-            sessions={[]} // Placeholder
-            currentSessionId={null}
-            onNewChat={() => {}}
-            onLoadSession={() => {}}
-            onDeleteSession={() => {}}
-            onDeleteAll={() => {}}
-            showHistory={false}
-            setShowHistory={() => {}}
           />
         );
       case 'adminUser':

@@ -46,53 +46,118 @@ const ChatWidget = ({
               <CardHeader className="p-6 border-b border-slate-50">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-900 text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <History size={14} className="text-indigo-500" /> Recent Dialogues
+                    {isIntelligence ? (
+                      <>
+                        <Sparkles size={14} className="text-purple-500" /> Current Thread
+                      </>
+                    ) : (
+                      <>
+                        <History size={14} className="text-indigo-500" /> Recent Dialogues
+                      </>
+                    )}
                   </span>
-                  <button onClick={onDeleteAll} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
+                  {!isIntelligence && (
+                    <button onClick={onDeleteAll} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start border-dashed border-2 hover:bg-slate-50 group py-6 h-auto"
-                  onClick={onNewChat}
-                  icon={<PlusCircle size={18} className="text-indigo-500 group-hover:scale-110 transition-transform" />}
-                >
-                  New Strategic Session
-                </Button>
-                
-                {sessions.map((session) => (
-                  <div 
-                    key={session.sessionId}
-                    className={cn(
-                      "group relative p-4 rounded-2xl cursor-pointer transition-all border-2",
-                      currentSessionId === session.sessionId 
-                        ? "bg-indigo-50 border-indigo-200" 
-                        : "bg-white border-transparent hover:border-slate-100 hover:bg-slate-50"
-                    )}
-                    onClick={() => onLoadSession(session.sessionId)}
-                  >
-                    <div className="pr-8">
-                      <p className="text-xs font-bold text-slate-900 line-clamp-1 mb-1">
-                        {session.firstMessage || 'Admission Inquiry'}
-                      </p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        {formatTime(session.timestamp)}
-                      </p>
-                    </div>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteSession(session.sessionId);
-                      }}
-                      className="absolute top-1/2 -translate-y-1/2 right-2 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
+                {isIntelligence ? (
+                  // Show saved conversations for Intelligence mode (like ChatGPT)
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start border-dashed border-2 hover:bg-purple-50 group py-6 h-auto border-purple-200"
+                      onClick={onNewChat}
+                      icon={<PlusCircle size={18} className="text-purple-500 group-hover:scale-110 transition-transform" />}
                     >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                      New Conversation
+                    </Button>
+                    
+                    {sessions.length === 0 && (
+                      <div className="text-center py-8 text-slate-400 text-xs">
+                        <Sparkles size={32} className="mx-auto mb-2 opacity-20" />
+                        <p>No saved conversations yet</p>
+                      </div>
+                    )}
+                    
+                    {sessions.map((session) => (
+                      <div 
+                        key={session.sessionId}
+                        className={cn(
+                          "group relative p-4 rounded-2xl cursor-pointer transition-all border-2",
+                          currentSessionId === session.sessionId 
+                            ? "bg-purple-50 border-purple-200" 
+                            : "bg-white border-transparent hover:border-purple-100 hover:bg-purple-50"
+                        )}
+                        onClick={() => onLoadSession(session.sessionId)}
+                      >
+                        <div className="pr-8">
+                          <p className="text-xs font-bold text-slate-900 line-clamp-2 mb-1">
+                            {session.firstMessage}
+                          </p>
+                          <p className="text-[10px] font-bold text-purple-500 uppercase tracking-wider">
+                            {formatTime(session.timestamp)}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteSession(session.sessionId);
+                          }}
+                          className="absolute top-1/2 -translate-y-1/2 right-2 p-1.5 text-purple-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  // Original saved sessions view for regular chat
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="w-full justify-start border-dashed border-2 hover:bg-slate-50 group py-6 h-auto"
+                      onClick={onNewChat}
+                      icon={<PlusCircle size={18} className="text-indigo-500 group-hover:scale-110 transition-transform" />}
+                    >
+                      New Strategic Session
+                    </Button>
+                    
+                    {sessions.map((session) => (
+                      <div 
+                        key={session.sessionId}
+                        className={cn(
+                          "group relative p-4 rounded-2xl cursor-pointer transition-all border-2",
+                          currentSessionId === session.sessionId 
+                            ? "bg-indigo-50 border-indigo-200" 
+                            : "bg-white border-transparent hover:border-slate-100 hover:bg-slate-50"
+                        )}
+                        onClick={() => onLoadSession(session.sessionId)}
+                      >
+                        <div className="pr-8">
+                          <p className="text-xs font-bold text-slate-900 line-clamp-1 mb-1">
+                            {session.firstMessage || 'Admission Inquiry'}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            {formatTime(session.timestamp)}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteSession(session.sessionId);
+                          }}
+                          className="absolute top-1/2 -translate-y-1/2 right-2 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -141,10 +206,19 @@ const ChatWidget = ({
                 </>
               )}
               {isIntelligence && (
-                <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 text-[10px] font-900 uppercase tracking-widest flex items-center gap-2 shadow-sm">
-                  <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                  Encrypted & Stateless
-                </div>
+                <>
+                  <button 
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="p-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+                    title="Show Conversation Thread"
+                  >
+                    <History size={20} />
+                  </button>
+                  <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 text-[10px] font-900 uppercase tracking-widest flex items-center gap-2 shadow-sm">
+                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                    Conversations Saved
+                  </div>
+                </>
               )}
             </div>
           </div>

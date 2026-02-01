@@ -1097,7 +1097,10 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
     // Save chat message if user is authenticated, sessionId is provided and storeHistory is not explicitly false
     const storeHistory = req.body.storeHistory !== false;
     
+    console.log(`[Chat] storeHistory flag: ${storeHistory}, sessionId: ${sessionId}`);
+    
     if (req.user && sessionId && storeHistory) {
+      console.log('[Chat] Saving chat to database...');
       try {
         let chatDoc = await ChatMessage.findOne({
           user: req.user._id,
@@ -1144,6 +1147,8 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
         console.error('Chat save error:', chatError);
         // Continue without saving if there's an error
       }
+    } else {
+      console.log('[Chat] Skipping database save - Privacy Mode Active (storeHistory: false)');
     }
 
     res.json({
@@ -1509,15 +1514,15 @@ app.post('/api/generate-pdf', optionalAuth, async (req, res) => {
     // Generate PDF using Puppeteer
     console.log('[PDF] Starting Puppeteer launch...');
     const browser = await puppeteer.launch({
-      headless: 'new',
-      // CRITICAL: Robust arguments for stability
+      headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     });
     console.log('[PDF] Browser launched successfully');
 
     const page = await browser.newPage();
     console.log('[PDF] Page created, setting content...');
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    // Use domcontentloaded for faster rendering and less timeout risk
+    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 30000 });
     console.log('[PDF] Content set, generating PDF buffer...');
 
     const pdfBuffer = await page.pdf({

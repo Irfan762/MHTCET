@@ -34,9 +34,7 @@ const Layout = ({
       case 'analysis':
         return { title: 'Round Analysis', subtitle: 'Multi-round cutoff trend intelligence' };
       case 'intelligence':
-        return { title: 'Intelligence Assistant', subtitle: 'Advanced, privacy-focused admission advisor' };
-      case 'chat':
-        return { title: 'AI Helpdesk', subtitle: 'Questions regarding the platform and admissions' };
+        return { title: 'Intelligence Assistant', subtitle: 'Advanced AI-powered admission strategy advisor' };
       case 'adminUser':
         return { title: 'Admin Panel', subtitle: 'Institutional student management dashboard' };
       default:
