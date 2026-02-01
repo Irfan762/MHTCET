@@ -1095,7 +1095,7 @@ app.post('/api/chat', optionalAuth, async (req, res) => {
     }
 
     // Save chat message if user is authenticated, sessionId is provided and storeHistory is not explicitly false
-    const storeHistory = req.body.storeHistory !== false;
+    const storeHistory = false; // Chat history storage disabled as per user request
     
     console.log(`[Chat] storeHistory flag: ${storeHistory}, sessionId: ${sessionId}`);
     

@@ -19,7 +19,7 @@ export const useAppLogic = () => {
     {
       id: 1,
       type: 'bot',
-      message: '🧠 **MHT-CET Intelligence Assistant Active**\n\nI am your comprehensive AI advisor for Maharashtra engineering admissions. I can help you with:\n\n• **Strategic College Selection** - Personalized recommendations\n• **Cutoff Analysis** - Historical trends and predictions  \n• **Admission Guidance** - Document requirements and process\n• **Platform Support** - Feature navigation and troubleshooting\n\nYour conversations are saved for future reference. Start a new chat anytime!\n\nHow can I assist you today?',
+      message: '🧠 **MHT-CET Intelligence Assistant Active**\n\nI am your comprehensive AI advisor for Maharashtra engineering admissions. I can help you with:\n\n• **Strategic College Selection** - Personalized recommendations\n• **Cutoff Analysis** - Historical trends and predictions  \n• **Admission Guidance** - Document requirements and process\n• **Platform Support** - Feature navigation and troubleshooting\n\n**Privacy Note:** Your conversations are NOT saved. This session is private.\n\nHow can I assist you today?',
       timestamp: new Date()
     }
   ]);
@@ -194,7 +194,7 @@ export const useAppLogic = () => {
         body: JSON.stringify({
           message: input,
           sessionId: sessionId,
-          storeHistory: true, // ENABLE history storage for Intelligence Assistant
+          storeHistory: false, // DISABLE history storage for Intelligence Assistant
           context: {
             currentSection: 'intelligence-assistant',
             userCategory: formData.category,

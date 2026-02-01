@@ -101,7 +101,7 @@ function App() {
             onLoadSession={loadIntelligenceSession}
             onDeleteSession={deleteIntelligenceSession}
             onDeleteAll={() => addNotification('Clear all history coming soon', 'info')}
-            showHistory={true}
+            showHistory={false}
             setShowHistory={() => {}}
             isIntelligence={true}
           />
