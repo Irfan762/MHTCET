@@ -59,17 +59,17 @@ const ResultCard = ({ prediction, onDownloadPDF, onShowDetails }) => {
             {risk.text}
           </div>
           
-          <div className="flex items-start gap-4 pr-32">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors shrink-0">
+          <div className="flex items-start gap-4 pr-8">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
               <School size={24} />
             </div>
-            <div className="space-y-1 min-w-0">
-              <h3 className="font-900 text-slate-900 tracking-tight text-lg line-clamp-2 leading-tight">
-                {prediction.name}
+            <div className="space-y-2 min-w-0 flex-1">
+              <h3 className="font-900 text-slate-900 tracking-tight text-base line-clamp-3 leading-snug break-words">
+                {prediction.name || 'College Name Not Available'}
               </h3>
-              <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
-                <MapPin size={12} className="text-indigo-500" />
-                {prediction.location || prediction.city}
+              <div className="flex items-center gap-2 text-slate-600 font-bold text-[11px] uppercase tracking-widest">
+                <MapPin size={12} className="text-indigo-500 flex-shrink-0" />
+                <span className="line-clamp-1">{prediction.location || prediction.city || 'Location TBD'}</span>
               </div>
             </div>
           </div>
