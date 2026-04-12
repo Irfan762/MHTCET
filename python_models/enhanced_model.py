@@ -56,7 +56,7 @@ class EnhancedCollegePredictionModel:
         try:
             print("📂 Loading data...")
             self.colleges_df = pd.read_csv('/workspaces/MHTCET/colleges_data.csv')
-            self.cutoffs_df = pd.read_csv('/workspaces/MHTCET/FINAL_MAHARASHTRA_ALL_CASTWISE_FULL.csv')
+            self.cutoffs_df = pd.read_csv('/workspaces/MHTCET/MHTCET_Cutoff_All_4_Rounds.csv')
             self.scholarships_df = pd.read_csv('/workspaces/MHTCET/scholarships.csv')
 
             # Preprocessing

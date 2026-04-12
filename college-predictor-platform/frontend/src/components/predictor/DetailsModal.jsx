@@ -42,6 +42,29 @@ const DetailsModal = ({ isOpen, onClose, prediction }) => {
 
   const currentRounds = selectedCourse?.rounds || [];
   const roundsToDisplay = currentRounds.length > 0 ? currentRounds : (prediction.allRounds || []);
+  const normalizedCategory = (prediction.category || 'General').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const categoryKeyMap = {
+    general: 'general',
+    open: 'general',
+    obc: 'obc',
+    sc: 'sc',
+    st: 'st',
+    ews: 'ews',
+    vjnt: 'vjnt',
+    vjdta: 'vjnt',
+    nt1: 'nt1',
+    nta: 'nt1',
+    nt2: 'nt2',
+    ntb: 'nt2',
+    nt3: 'nt3',
+    ntc: 'nt3',
+    sebc: 'sebc',
+    sbc: 'sebc',
+    tfws: 'tfws'
+  };
+  const selectedCategoryKey = categoryKeyMap[normalizedCategory] || 'general';
+  const selectedCategoryLabel = (prediction.category || 'General').toUpperCase();
+  const displayedRounds = roundsToDisplay;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -133,22 +156,35 @@ const DetailsModal = ({ isOpen, onClose, prediction }) => {
               <div className="space-y-4">
                 <h4 className="text-lg font-900 text-slate-900 flex items-center gap-2 italic">
                   <TrendingUp size={20} className="text-indigo-600" />
-                  Cutoff Stratigraphy (4 Rounds)
+                  Category-wise Cutoff Stratigraphy
                 </h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">
+                  Showing cutoff for category: {selectedCategoryLabel}
+                </p>
                 <div className="overflow-hidden rounded-3xl border border-slate-100 bg-slate-50/50">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-white border-b border-slate-100">
                         <th className="px-6 py-4 text-[10px] font-900 text-slate-400 uppercase tracking-widest italic text-center">Round</th>
-                        <th className="px-6 py-4 text-[10px] font-900 text-slate-400 uppercase tracking-widest italic">Closing Cutoff</th>
+                        <th className="px-6 py-4 text-[10px] font-900 text-slate-400 uppercase tracking-widest italic">{selectedCategoryLabel} Cutoff</th>
                         <th className="px-6 py-4 text-[10px] font-900 text-slate-400 uppercase tracking-widest italic">Type</th>
                         <th className="px-6 py-4 text-[10px] font-900 text-slate-400 uppercase tracking-widest italic text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100/50">
-                      {roundsToDisplay.map((round, idx) => {
-                        const cutoff = round.cutoff || round.cutoffForCategory;
-                        const isCleared = prediction.percentile && prediction.percentile >= cutoff;
+                      {displayedRounds.length > 0 ? displayedRounds.map((round, idx) => {
+                        const cutoff =
+                          round.cutoffByCategory?.[selectedCategoryKey] ??
+                          round.cutoffMap?.[selectedCategoryKey] ??
+                          round.cutoff?.[selectedCategoryKey] ??
+                          round.cutoffForCategory ??
+                          round.cutoff ??
+                          'N/A';
+                        const cutoffNumber = parseFloat(cutoff);
+                        const percentileNumber = parseFloat(prediction.percentile);
+                        const isCleared = !Number.isNaN(percentileNumber) && !Number.isNaN(cutoffNumber)
+                          ? percentileNumber >= cutoffNumber
+                          : false;
                         
                         return (
                           <tr key={idx} className={cn(
@@ -160,10 +196,10 @@ const DetailsModal = ({ isOpen, onClose, prediction }) => {
                                 {round.round || (idx + 1)}
                               </span>
                             </td>
-                            <td className="px-6 py-4 font-bold text-slate-900 italic">{cutoff}</td>
+                            <td className="px-6 py-4 font-bold text-slate-900 italic">{cutoff ?? 'N/A'}</td>
                             <td className="px-6 py-4">
                               <span className="px-2 py-1 rounded-lg bg-white border border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                {round.seatType || prediction.seatTypeLabel || 'GEN'}
+                                {round.seatTypeLabel || round.seatType || prediction.seatTypeLabel || 'GENERAL'}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-center">
@@ -187,7 +223,13 @@ const DetailsModal = ({ isOpen, onClose, prediction }) => {
                             </td>
                           </tr>
                         );
-                      })}
+                      }) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-10 text-center text-sm font-bold text-slate-400 italic">
+                            Last year cutoff data is not available for this college.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

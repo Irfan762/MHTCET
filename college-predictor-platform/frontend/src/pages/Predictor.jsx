@@ -21,7 +21,11 @@ const Predictor = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleShowDetails = (college) => {
-    setSelectedCollege({ ...college, percentile: formData.percentile });
+    setSelectedCollege({
+      ...college,
+      percentile: formData.percentile,
+      category: formData.category
+    });
     setIsModalOpen(true);
   };
   

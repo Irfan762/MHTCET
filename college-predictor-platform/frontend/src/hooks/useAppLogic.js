@@ -434,13 +434,12 @@ export const useAppLogic = () => {
       });
       const data = await response.json();
       if (data.success) {
-        // Filter for intelligence assistant sessions only
-        const intelligenceSessions = data.sessions
-          .filter(s => s.sessionId.startsWith('intelligence_'))
+        const intelligenceSessions = (data.sessions || [])
+          .filter(s => s.sessionId?.startsWith('intelligence_'))
           .map(s => ({
             sessionId: s.sessionId,
-            firstMessage: s.messages[0]?.message || 'New Conversation',
-            timestamp: s.updatedAt || s.createdAt
+            firstMessage: s.preview || 'New conversation',
+            timestamp: s.lastMessage || new Date().toISOString()
           }));
         setIntelligenceHistory(intelligenceSessions);
       }
@@ -454,7 +453,7 @@ export const useAppLogic = () => {
     setIntelligenceMessages([{
       id: 1,
       type: 'bot',
-      message: '🧠 **MHT-CET Intelligence Assistant Active**\n\nI am your comprehensive AI advisor for Maharashtra engineering admissions. I can help you with:\n\n• **Strategic College Selection** - Personalized recommendations\n• **Cutoff Analysis** - Historical trends and predictions  \n• **Admission Guidance** - Document requirements and process\n• **Platform Support** - Feature navigation and troubleshooting\n\nYour conversations are saved for future reference. Start a new chat anytime!\n\nHow can I assist you today?',
+      message: '🧠 **MHT-CET Intelligence Assistant Active**\n\nI am your comprehensive AI advisor for Maharashtra engineering admissions. I can help you with:\n\n• **Strategic College Selection** - Personalized recommendations\n• **Cutoff Analysis** - Historical trends and predictions  \n• **Admission Guidance** - Document requirements and process\n• **Platform Support** - Feature navigation and troubleshooting\n\n**Privacy Note:** Conversations are not stored in privacy mode.\n\nHow can I assist you today?',
       timestamp: new Date()
     }]);
     addNotification('Started new conversation', 'success');
@@ -463,20 +462,25 @@ export const useAppLogic = () => {
   const loadIntelligenceSession = async (sessionId) => {
     try {
       const token = localStorage.getItem('mhtcet_token');
-      const response = await fetch(`http://127.0.0.1:3001/api/chat/session/${sessionId}`, {
+      const response = await fetch(`http://127.0.0.1:3001/api/chat/history/${sessionId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      if (data.success && data.session) {
+      if (data.success) {
         setIntelligenceSessionId(sessionId);
-        const loadedMessages = data.session.messages.map((msg, idx) => ({
+        const loadedMessages = (data.messages || []).map((msg, idx) => ({
           id: idx + 1,
           type: msg.type,
           message: msg.message,
-          timestamp: new Date(msg.timestamp)
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
         }));
-        setIntelligenceMessages(loadedMessages);
-       addNotification('Conversation loaded', 'success');
+        setIntelligenceMessages(loadedMessages.length > 0 ? loadedMessages : [{
+          id: 1,
+          type: 'bot',
+          message: 'No messages found for this session.',
+          timestamp: new Date()
+        }]);
+        addNotification('Conversation loaded', 'success');
       }
     } catch (error) {
       addNotification('Failed to load conversation', 'error');
@@ -486,7 +490,7 @@ export const useAppLogic = () => {
   const deleteIntelligenceSession = async (sessionId) => {
     try {
       const token = localStorage.getItem('mhtcet_token');
-      await fetch(`http://127.0.0.1:3001/api/chat/session/${sessionId}`, {
+      await fetch(`http://127.0.0.1:3001/api/chat/history/${sessionId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -497,6 +501,26 @@ export const useAppLogic = () => {
       addNotification('Conversation deleted', 'success');
     } catch (error) {
       addNotification('Delete failed', 'error');
+    }
+  };
+
+  const deleteAllIntelligenceHistory = async () => {
+    try {
+      const token = localStorage.getItem('mhtcet_token');
+      const response = await fetch('http://127.0.0.1:3001/api/chat/history', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIntelligenceHistory([]);
+        startNewIntelligenceChat();
+        addNotification('All conversations deleted', 'success');
+      } else {
+        addNotification(data.message || 'Clear failed', 'error');
+      }
+    } catch (error) {
+      addNotification('Clear failed', 'error');
     }
   };
 
@@ -602,6 +626,7 @@ export const useAppLogic = () => {
     deletePrediction, deleteAllPredictions, loadPredictionFromHistory,
     handleAuth, handleLogout, handlePredict, handleChatSend, handleIntelligenceChatSend, downloadPDF, downloadHistoryPDF, downloadAllPDF,
     startNewIntelligenceChat, loadIntelligenceSession, deleteIntelligenceSession,
+    deleteAllIntelligenceHistory,
     addNotification
   };
 };

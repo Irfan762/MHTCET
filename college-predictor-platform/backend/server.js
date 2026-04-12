@@ -5,6 +5,9 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Database and Models
 import connectDB from './config/database.js';
@@ -20,6 +23,174 @@ import { authenticate, optionalAuth, generateToken, authorize } from './middlewa
 import { seedColleges } from './seeders/collegeSeeder.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const normalizeLookupText = (value = '') => value.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+const canonicalizeCollegeLookup = (value = '') => {
+  let normalized = normalizeLookupText(value);
+  normalized = normalized.replace(/chhatrapatisambhajinagar/g, 'aurangabad');
+  normalized = normalized.replace(/sambhajinagar/g, 'aurangabad');
+  normalized = normalized.replace(/govt/g, 'government');
+  return normalized;
+};
+
+// Branch name aliases for matching similar branches
+const branchAliases = {
+  'computerengineering': ['computerengineering', 'computerscienceandengineering', 'computerscienceengg', 'cse', 'cs'],
+  'computerscienceandengineering': ['computerengineering', 'computerscienceandengineering', 'computerscienceengg', 'cse', 'cs'],
+  'computerscienceengg': ['computerengineering', 'computerscienceandengineering', 'computerscienceengg', 'cse', 'cs'],
+  'cse': ['computerengineering', 'computerscienceandengineering', 'computerscienceengg', 'cse', 'cs'],
+  'cs': ['computerengineering', 'computerscienceandengineering', 'computerscienceengg', 'cse', 'cs'],
+  'electricalengineering': ['electricalengineering', 'electricalengg', 'ee', 'electrical'],
+  'electricalengg': ['electricalengineering', 'electricalengg', 'ee', 'electrical'],
+  'ee': ['electricalengineering', 'electricalengg', 'ee', 'electrical'],
+  'electronicsengg': ['electronicsandtelecommunicationengg', 'electronicsengg', 'electronics', 'ece', 'etc'],
+  'electronicsandtelecommunicationengg': ['electronicsandtelecommunicationengg', 'electronicsengg', 'electronics', 'ece', 'etc'],
+  'electronics': ['electronicsandtelecommunicationengg', 'electronicsengg', 'electronics', 'ece', 'etc'],
+  'ece': ['electronicsandtelecommunicationengg', 'electronicsengg', 'electronics', 'ece', 'etc'],
+  'etc': ['electronicsandtelecommunicationengg', 'electronicsengg', 'electronics', 'ece', 'etc'],
+  'mechanicalengineering': ['mechanicalengineering', 'mechanicalengg', 'me', 'mechanical'],
+  'mechanicalengg': ['mechanicalengineering', 'mechanicalengg', 'me', 'mechanical'],
+  'me': ['mechanicalengineering', 'mechanicalengg', 'me', 'mechanical'],
+  'civilengineering': ['civilengineering', 'civilengg', 'ce', 'civil'],
+  'civilengg': ['civilengineering', 'civilengg', 'ce', 'civil'],
+  'ce': ['civilengineering', 'civilengg', 'ce', 'civil'],
+  'instrumentationengineering': ['instrumentationengineering', 'instrumentationengg', 'ie'],
+  'informationtechnology': ['informationtechnology', 'it'],
+  'it': ['informationtechnology', 'it']
+};
+
+const canonicalizeBranchName = (branchName = '') => {
+  const normalized = normalizeLookupText(branchName);
+  // Return all matching aliases
+  for (const [key, aliases] of Object.entries(branchAliases)) {
+    if (aliases.includes(normalized)) {
+      return aliases; // Return all aliases for this branch
+    }
+  }
+  return [normalized]; // Return the normalized name if no alias found
+};
+
+const parseCsvLine = (line = '') => {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  values.push(current);
+  return values;
+};
+
+const loadCsvCutoffData = () => {
+  try {
+    const csvPath = path.join(__dirname, '../../MHTCET_Cutoff_All_4_Rounds.csv');
+    if (!fs.existsSync(csvPath)) {
+      console.warn('[CSV] Cutoff file not found:', csvPath);
+      return [];
+    }
+
+    const raw = fs.readFileSync(csvPath, 'utf8');
+    const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (lines.length <= 1) return [];
+
+    const headers = parseCsvLine(lines[0]).map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase());
+    const idx = headers.reduce((acc, header, i) => {
+      acc[header] = i;
+      return acc;
+    }, {});
+
+    const getValue = (parts, key) => {
+      const colIdx = idx[key];
+      if (typeof colIdx === 'undefined') return '';
+      return (parts[colIdx] || '').trim().replace(/^"|"$/g, '');
+    };
+
+    const getNumber = (parts, key) => {
+      const value = getValue(parts, key);
+      if (!value) return null;
+      const parsed = parseFloat(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    const records = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = parseCsvLine(lines[i]);
+      const collegeName = getValue(parts, 'college_name');
+      const branchName = getValue(parts, 'branch_name');
+      if (!collegeName || !branchName) continue;
+
+      const rounds = [];
+      for (let round = 1; round <= 4; round++) {
+        const cutoffByCategory = {
+          general: getNumber(parts, `general_percentage_r${round}`),
+          obc: getNumber(parts, `obc_percentage_r${round}`),
+          sc: getNumber(parts, `sc_percentage_r${round}`),
+          st: getNumber(parts, `st_percentage_r${round}`),
+          ews: getNumber(parts, `ews_percentage_r${round}`),
+          vjnt: getNumber(parts, `vjnt_percentage_r${round}`),
+          nt1: null,
+          nt2: null,
+          nt3: null,
+          sebc: getNumber(parts, `sbc_percentage_r${round}`),
+          tfws: null
+        };
+
+        const hasCutoff = Object.values(cutoffByCategory).some((value) => value !== null && value !== undefined);
+        if (!hasCutoff) continue;
+
+        const isTfws = getValue(parts, 'is_tfws') === 'Yes' || getValue(parts, 'is_tfws') === 'TRUE';
+        const seatLevel = getValue(parts, 'seat_level') || 'General';
+        
+        rounds.push({
+          round,
+          cutoffByCategory,
+          cutoff: cutoffByCategory.general,
+          seatType: seatLevel,
+          isTfws: isTfws,
+          seatTypeLabel: isTfws ? `${seatLevel} (TFWS)` : seatLevel
+        });
+      }
+
+      records.push({
+        collegeName,
+        collegeNameNormalized: normalizeLookupText(collegeName),
+        branchName,
+        branchNameNormalized: normalizeLookupText(branchName),
+        collegeCode: getValue(parts, 'college_code'),
+        branchCode: getValue(parts, 'branch_code'),
+        location: getValue(parts, 'location'),
+        collegeType: getValue(parts, 'college_type'),
+        rounds
+      });
+    }
+
+    console.log(`[CSV] Loaded ${records.length} cutoff rows from CSV`);
+    return records;
+  } catch (error) {
+    console.error('[CSV] Failed to load cutoff data:', error.message);
+    return [];
+  }
+};
+
+const csvCutoffRows = loadCsvCutoffData();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -528,6 +699,19 @@ app.get('/api/colleges', optionalAuth, async (req, res) => {
         rounds: c.rounds.map(r => ({
           round: r.number,
           cutoff: r.cutoff?.general || r.cutoff?.tfws || 0,
+          cutoffByCategory: {
+            general: r.cutoff?.general,
+            obc: r.cutoff?.obc,
+            sc: r.cutoff?.sc,
+            st: r.cutoff?.st,
+            ews: r.cutoff?.ews,
+            vjnt: r.cutoff?.vjnt,
+            nt1: r.cutoff?.nt1,
+            nt2: r.cutoff?.nt2,
+            nt3: r.cutoff?.nt3,
+            sebc: r.cutoff?.sebc,
+            tfws: r.cutoff?.tfws
+          },
           seatType: r.cutoff?.tfws ? 'TFWS' : 'General'
         }))
       })),
@@ -637,7 +821,7 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
     // Call Python Flask ML API for enhanced predictions
     let predictions = [];
     try {
-      console.log('[ML Prediction] Calling Flask ML API...');
+      console.log('[ML Prediction] Calling Flask ML API with percentile:', userPercentile);
       const mlResponse = await fetch('http://localhost:5000/predict', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -651,37 +835,295 @@ app.post('/api/predictions', optionalAuth, async (req, res) => {
       });
 
       if (!mlResponse.ok) {
-        throw new Error(`ML API returned ${mlResponse.status}`);
+        const errorText = await mlResponse.text();
+        throw new Error(`ML API returned ${mlResponse.status}: ${errorText}`);
       }
 
       const mlData = await mlResponse.json();
+      console.log('[ML Prediction] Flask response:', mlData);
+      
       if (mlData.status === 'success' && mlData.predictions) {
         predictions = mlData.predictions;
         console.log(`[ML Prediction] Got ${predictions.length} predictions from ML model`);
+      } else if (mlData.status === 'error') {
+        throw new Error(mlData.message || 'Flask API returned error');
       }
     } catch (mlError) {
       console.error('[ML Prediction] ML API error:', mlError.message);
       return res.status(503).json({
         success: false,
         message: 'ML prediction service unavailable. Please ensure Flask API is running on port 5000',
-        error: mlError.message
+        error: mlError.message,
+        debug: {
+          percentile: userPercentile,
+          category: category,
+          courses: courses
+        }
       });
     }
 
     // If no predictions from ML model
     if (!predictions || predictions.length === 0) {
+      console.log('[ML Prediction] No predictions returned from Flask API');
       return res.status(400).json({
         success: false,
-        message: 'No suitable colleges found matching your criteria'
+        message: 'No suitable colleges found matching your criteria. Please check your percentile or category selection.',
+        debug: {
+          percentile: userPercentile,
+          category: category,
+          courses: courses
+        }
       });
     }
-    // Format predictions from ML model
-    const allPredictions = predictions.map((pred, idx) => ({
+    const normalizeText = normalizeLookupText;
+    const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const mapCategoryToKey = (inputCategory = '') => {
+      const normalized = inputCategory.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normalized.includes('general') || normalized.includes('open')) return 'general';
+      if (normalized.includes('obc')) return 'obc';
+      if (normalized === 'sc' || normalized.includes('scheduledcaste')) return 'sc';
+      if (normalized === 'st' || normalized.includes('scheduledtribe')) return 'st';
+      if (normalized.includes('ews')) return 'ews';
+      if (normalized.includes('vj')) return 'vjnt';
+      if (normalized.includes('nta') || normalized.includes('nt1')) return 'nt1';
+      if (normalized.includes('ntb') || normalized.includes('nt2')) return 'nt2';
+      if (normalized.includes('ntc') || normalized.includes('nt3')) return 'nt3';
+      if (normalized.includes('sbc') || normalized.includes('sebc')) return 'sebc';
+      if (normalized.includes('tfws')) return 'tfws';
+      return 'general';
+    };
+
+    const categoryKey = mapCategoryToKey(category);
+    
+    // Try to load from MongoDB, fallback to empty if unavailable
+    let allColleges = [];
+    try {
+      allColleges = await College.find({}, {
+        name: 1,
+        location: 1,
+        city: 1,
+        type: 1,
+        establishedYear: 1,
+        courses: 1,
+        rounds: 1
+      }).lean().maxTimeMS(5000);
+    } catch (mongoError) {
+      console.warn('[ML Prediction] MongoDB unavailable, using CSV data only:', mongoError.message);
+      allColleges = [];
+    }
+
+    const allCollegesWithNormalizedName = allColleges.map((collegeDoc) => ({
+      ...collegeDoc,
+      _normalizedName: normalizeText(collegeDoc.name)
+    }));
+
+    const findBestCollegeMatch = (predictionCollegeName) => {
+      const normalizedPredictionName = normalizeText(predictionCollegeName);
+      if (!normalizedPredictionName) return null;
+
+      let exact = allCollegesWithNormalizedName.find(
+        (collegeDoc) => collegeDoc._normalizedName === normalizedPredictionName
+      );
+      if (exact) return exact;
+
+      // Fuzzy fallback for names like "Veermata Jijabai Technological Institute"
+      // matching CSV names like "Veermata Jijabai Technological Institute(VJTI), Matunga, Mumbai".
+      const inclusionMatches = allCollegesWithNormalizedName.filter((collegeDoc) =>
+        collegeDoc._normalizedName.includes(normalizedPredictionName) ||
+        normalizedPredictionName.includes(collegeDoc._normalizedName)
+      );
+
+      if (inclusionMatches.length > 0) {
+        return inclusionMatches.sort((a, b) => b._normalizedName.length - a._normalizedName.length)[0];
+      }
+
+      const meaningfulTokens = predictionCollegeName
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((token) => token.length > 3)
+        .filter((token) => !['college', 'engineering', 'institute', 'technology', 'technological', 'university', 'management'].includes(token));
+
+      if (meaningfulTokens.length === 0) return null;
+
+      const tokenScoredMatches = allCollegesWithNormalizedName
+        .map((collegeDoc) => {
+          const loweredCollegeName = collegeDoc.name.toLowerCase();
+          const tokenHits = meaningfulTokens.filter((token) => loweredCollegeName.includes(token)).length;
+          return { collegeDoc, tokenHits };
+        })
+        .filter((item) => item.tokenHits > 0)
+        .sort((a, b) => b.tokenHits - a.tokenHits || b.collegeDoc._normalizedName.length - a.collegeDoc._normalizedName.length);
+
+      return tokenScoredMatches[0]?.collegeDoc || null;
+    };
+
+    const getMeaningfulTokens = (input = '') => input
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((token) => (token === 'sambhajinagar' ? 'aurangabad' : token))
+      .filter((token) => token.length > 3)
+      .filter((token) => !['college', 'engineering', 'institute', 'technology', 'technological', 'university', 'autonomous', 'government'].includes(token));
+
+    const findBestCsvMatch = (predictionCollegeName, predictionBranchName) => {
+      const normalizedCollege = canonicalizeCollegeLookup(predictionCollegeName);
+      const normalizedBranch = normalizeText(predictionBranchName);
+      const branchAliasSet = new Set(canonicalizeBranchName(predictionBranchName)); // Get all aliases
+      if (!normalizedCollege || !normalizedBranch) return null;
+
+      let exact = csvCutoffRows.find((row) =>
+        canonicalizeCollegeLookup(row.collegeNameNormalized) === normalizedCollege &&
+        (row.branchNameNormalized === normalizedBranch || branchAliasSet.has(row.branchNameNormalized))
+      );
+      if (exact) return exact;
+
+      const predictionTokens = getMeaningfulTokens(predictionCollegeName);
+
+      const candidates = csvCutoffRows.filter((row) => {
+        const canonicalRowCollege = canonicalizeCollegeLookup(row.collegeNameNormalized);
+        // Check if branch matches using aliases
+        const hasBranchSignal = branchAliasSet.has(row.branchNameNormalized) || 
+                               row.branchNameNormalized.includes(normalizedBranch) || 
+                               normalizedBranch.includes(row.branchNameNormalized);
+        const hasCollegeSignal = canonicalRowCollege.includes(normalizedCollege) || normalizedCollege.includes(canonicalRowCollege);
+        if (hasBranchSignal && hasCollegeSignal) return true;
+        if (!hasBranchSignal) return false;
+
+        if (predictionTokens.length === 0) return false;
+        const rowNameLower = row.collegeName.toLowerCase().replace(/sambhajinagar/g, 'aurangabad');
+        const tokenHits = predictionTokens.filter((token) => rowNameLower.includes(token)).length;
+        return tokenHits > 0;
+      });
+
+      const scored = candidates
+        .map((row) => {
+          const canonicalRowCollege = canonicalizeCollegeLookup(row.collegeNameNormalized);
+          const rowNameLower = row.collegeName.toLowerCase().replace(/sambhajinagar/g, 'aurangabad');
+          const tokenHits = predictionTokens.filter((token) => rowNameLower.includes(token)).length;
+          let score = 0;
+          if (row.branchNameNormalized === normalizedBranch) score += 10;
+          if (row.branchNameNormalized.includes(normalizedBranch) || normalizedBranch.includes(row.branchNameNormalized)) score += 5;
+          if (canonicalRowCollege === normalizedCollege) score += 12;
+          if (canonicalRowCollege.includes(normalizedCollege) || normalizedCollege.includes(canonicalRowCollege)) score += 8;
+          score += tokenHits * 3;
+          return { row, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      return scored[0]?.score >= 10 ? scored[0].row : null;
+    };
+
+    const toRoundPayload = (roundDoc) => {
+      const cutoffByCategory = {
+        general: roundDoc?.cutoff?.general ?? null,
+        obc: roundDoc?.cutoff?.obc ?? null,
+        sc: roundDoc?.cutoff?.sc ?? null,
+        st: roundDoc?.cutoff?.st ?? null,
+        ews: roundDoc?.cutoff?.ews ?? null,
+        vjnt: roundDoc?.cutoff?.vjnt ?? null,
+        nt1: roundDoc?.cutoff?.nt1 ?? null,
+        nt2: roundDoc?.cutoff?.nt2 ?? null,
+        nt3: roundDoc?.cutoff?.nt3 ?? null,
+        sebc: roundDoc?.cutoff?.sebc ?? null,
+        tfws: roundDoc?.cutoff?.tfws ?? null
+      };
+
+      return {
+        round: roundDoc?.number,
+        cutoff: cutoffByCategory[categoryKey] ?? cutoffByCategory.general ?? cutoffByCategory.tfws ?? null,
+        cutoffByCategory,
+        seatType: cutoffByCategory.tfws ? 'TFWS' : 'General'
+      };
+    };
+
+    // Format predictions from ML model - Map Flask API fields to frontend expectations
+    const allPredictions = predictions.map((pred, idx) => {
+      const predictionName = pred.college_name || pred.college || pred.name || 'Unknown College';
+      const predictionBranch = pred.branch || pred.course || courses[0] || 'Engineering';
+      const matchedCollege = findBestCollegeMatch(predictionName);
+      const matchedCsvRow = findBestCsvMatch(predictionName, predictionBranch);
+
+      let matchedCourse = null;
+      if (matchedCollege?.courses?.length) {
+        const normalizedBranch = normalizeText(predictionBranch);
+        const branchAliasSet = new Set(canonicalizeBranchName(predictionBranch)); // Get all aliases
+        
+        // First, try exact match with branch aliases
+        matchedCourse = matchedCollege.courses.find((courseDoc) => 
+          branchAliasSet.has(normalizeText(courseDoc.name)) || 
+          normalizeText(courseDoc.name) === normalizedBranch
+        );
+
+        if (!matchedCourse) {
+          // Then try fuzzy matching with includes
+          matchedCourse = matchedCollege.courses.find((courseDoc) => {
+            const normalizedCourse = normalizeText(courseDoc.name);
+            return normalizedCourse.includes(normalizedBranch) || normalizedBranch.includes(normalizedCourse) || branchAliasSet.has(normalizedCourse);
+          });
+        }
+      }
+
+      const sourceRounds = (matchedCourse?.rounds?.length ? matchedCourse.rounds : matchedCollege?.rounds || [])
+        .filter((r) => r && typeof r.number !== 'undefined')
+        .sort((a, b) => a.number - b.number);
+
+      const csvRounds = (matchedCsvRow?.rounds || []).map((round) => ({
+        round: round.round,
+        cutoffByCategory: round.cutoffByCategory,
+        cutoff: round.cutoffByCategory?.[categoryKey] ?? round.cutoffByCategory?.general ?? null,
+        seatType: round.seatType || 'General'
+      }));
+
+      const allRounds = csvRounds.length > 0 ? csvRounds : sourceRounds.map(toRoundPayload);
+      const validRoundCutoffs = allRounds
+        .map((round) => ({ ...round, cutoffValue: parseFloat(round.cutoff) }))
+        .filter((round) => !Number.isNaN(round.cutoffValue));
+
+      const bestRound = validRoundCutoffs
+        .filter((round) => userPercentile >= round.cutoffValue)
+        .map((round) => round.round)
+        .sort((a, b) => b - a)[0] || null;
+
+      const closingRoundCutoff = validRoundCutoffs.length > 0
+        ? validRoundCutoffs[validRoundCutoffs.length - 1].cutoffValue
+        : null;
+
+      return {
+      // Keep all original fields first
       ...pred,
+      // Flask API returns: college_name, location, college_type, seat_type, seat_level, is_tfws, is_ladies, etc.
+      // Frontend expects: name, admissionChance, cutoffForCategory, etc.
+      // These mapped fields override the original ones
+      name: predictionName,
+      collegeName: predictionName,
+      admissionChance: pred.admission_probability || pred.admissionChance || pred.match_percentage || 50,
+      admissionProbability: pred.admission_probability || pred.admissionChance || pred.match_percentage || 50,
+      cutoffForCategory: closingRoundCutoff ?? pred.percentile_required ?? pred.cut_off ?? pred.cutoffForCategory ?? 'N/A',
+      lastYearCutoff: closingRoundCutoff ?? pred.percentile_required ?? pred.cut_off ?? pred.cutoffForCategory ?? null,
+      location: pred.location || matchedCollege?.location || matchedCsvRow?.location || 'Not specified',
+      city: pred.location || matchedCollege?.city || matchedCsvRow?.location || 'Not specified',
+      type: pred.college_type || matchedCollege?.type || matchedCsvRow?.collegeType || 'N/A',
+      establishedYear: pred.establishedYear || matchedCollege?.establishedYear || 'N/A',
+      code: pred.code || matchedCsvRow?.collegeCode || '',
+      branch: predictionBranch,
+      course: predictionBranch,
+      seat_type: pred.seat_type || 'General',
+      seat_level: pred.seat_level || 'State',
+      is_tfws: pred.is_tfws || false,
+      is_ladies: pred.is_ladies || false,
+      allRounds,
+      bestMatchingRound: bestRound,
+      confidence: pred.confidence || pred.match_percentage / 100 || 0.75,
+      category: category,
+      percentile: userPercentile,
       rank: idx + 1,
       modelSource: 'EnhancedML',
       accuracy: '90.7%'
-    }));
+    };
+    });
 
     // Metadata from ML predictions
     const metadata = {
@@ -753,11 +1195,127 @@ app.get('/api/predictions/history', authenticate, async (req, res) => {
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
 
+    const mapCategoryToKey = (inputCategory = '') => {
+      const normalized = inputCategory.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normalized.includes('general') || normalized.includes('open')) return 'general';
+      if (normalized.includes('obc')) return 'obc';
+      if (normalized === 'sc' || normalized.includes('scheduledcaste')) return 'sc';
+      if (normalized === 'st' || normalized.includes('scheduledtribe')) return 'st';
+      if (normalized.includes('ews')) return 'ews';
+      if (normalized.includes('vj')) return 'vjnt';
+      if (normalized.includes('nta') || normalized.includes('nt1')) return 'nt1';
+      if (normalized.includes('ntb') || normalized.includes('nt2')) return 'nt2';
+      if (normalized.includes('ntc') || normalized.includes('nt3')) return 'nt3';
+      if (normalized.includes('sbc') || normalized.includes('sebc')) return 'sebc';
+      if (normalized.includes('tfws')) return 'tfws';
+      return 'general';
+    };
+
+    const getMeaningfulTokens = (input = '') => input
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((token) => (token === 'sambhajinagar' ? 'aurangabad' : token))
+      .filter((token) => token.length > 3)
+      .filter((token) => !['college', 'engineering', 'institute', 'technology', 'technological', 'university', 'autonomous', 'government'].includes(token));
+
+    const findBestCsvMatch = (predictionCollegeName, predictionBranchName) => {
+      const normalizedCollege = canonicalizeCollegeLookup(predictionCollegeName);
+      const normalizedBranch = normalizeLookupText(predictionBranchName);
+      const branchAliasSet = new Set(canonicalizeBranchName(predictionBranchName)); // Get all aliases
+      if (!normalizedCollege || !normalizedBranch) return null;
+
+      const exact = csvCutoffRows.find((row) =>
+        canonicalizeCollegeLookup(row.collegeNameNormalized) === normalizedCollege &&
+        (row.branchNameNormalized === normalizedBranch || branchAliasSet.has(row.branchNameNormalized))
+      );
+      if (exact) return exact;
+
+      const predictionTokens = getMeaningfulTokens(predictionCollegeName);
+
+      const candidates = csvCutoffRows.filter((row) => {
+        const canonicalRowCollege = canonicalizeCollegeLookup(row.collegeNameNormalized);
+        // Check if branch matches using aliases
+        const hasBranchSignal = branchAliasSet.has(row.branchNameNormalized) || 
+                               row.branchNameNormalized.includes(normalizedBranch) || 
+                               normalizedBranch.includes(row.branchNameNormalized);
+        const hasCollegeSignal = canonicalRowCollege.includes(normalizedCollege) || normalizedCollege.includes(canonicalRowCollege);
+        if (hasBranchSignal && hasCollegeSignal) return true;
+        if (!hasBranchSignal || predictionTokens.length === 0) return false;
+
+        const rowNameLower = row.collegeName.toLowerCase().replace(/sambhajinagar/g, 'aurangabad');
+        const tokenHits = predictionTokens.filter((token) => rowNameLower.includes(token)).length;
+        return tokenHits > 0;
+      });
+
+      const scored = candidates
+        .map((row) => {
+          const canonicalRowCollege = canonicalizeCollegeLookup(row.collegeNameNormalized);
+          const rowNameLower = row.collegeName.toLowerCase().replace(/sambhajinagar/g, 'aurangabad');
+          const tokenHits = predictionTokens.filter((token) => rowNameLower.includes(token)).length;
+          let score = 0;
+          if (row.branchNameNormalized === normalizedBranch || branchAliasSet.has(row.branchNameNormalized)) score += 10;
+          if (row.branchNameNormalized.includes(normalizedBranch) || normalizedBranch.includes(row.branchNameNormalized)) score += 5;
+          if (canonicalRowCollege === normalizedCollege) score += 12;
+          if (canonicalRowCollege.includes(normalizedCollege) || normalizedCollege.includes(canonicalRowCollege)) score += 8;
+          score += tokenHits * 3;
+          return { row, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      return scored[0]?.score >= 10 ? scored[0].row : null;
+    };
+
+    const refreshedPredictions = predictions.map((predictionDoc) => {
+      const predictionObj = predictionDoc.toObject();
+      const categoryKey = mapCategoryToKey(predictionObj.inputData?.category || 'General');
+
+      predictionObj.predictions = (predictionObj.predictions || []).map((pred) => {
+        const predictionName = pred.collegeName || pred.name || pred.college || '';
+        const predictionBranch = pred.branch || pred.course || predictionObj.inputData?.courses?.[0] || '';
+        const matchedCsvRow = findBestCsvMatch(predictionName, predictionBranch);
+
+        if (!matchedCsvRow || !Array.isArray(matchedCsvRow.rounds) || matchedCsvRow.rounds.length === 0) {
+          return pred;
+        }
+
+        const csvRounds = matchedCsvRow.rounds.map((round) => ({
+          round: round.round,
+          cutoffByCategory: round.cutoffByCategory,
+          cutoff: round.cutoffByCategory?.[categoryKey] ?? round.cutoffByCategory?.general ?? null,
+          seatType: round.seatType || 'State'
+        }));
+
+        const validRoundCutoffs = csvRounds
+          .map((round) => ({ ...round, cutoffValue: parseFloat(round.cutoff) }))
+          .filter((round) => !Number.isNaN(round.cutoffValue));
+
+        const closingRoundCutoff = validRoundCutoffs.length > 0
+          ? validRoundCutoffs[validRoundCutoffs.length - 1].cutoffValue
+          : null;
+
+        return {
+          ...pred,
+          allRounds: csvRounds,
+          cutoffForCategory: closingRoundCutoff ?? pred.cutoffForCategory ?? 'N/A',
+          lastYearCutoff: closingRoundCutoff ?? pred.lastYearCutoff ?? null,
+          code: pred.code || matchedCsvRow.collegeCode || '',
+          location: pred.location || matchedCsvRow.location || pred.city || 'Not specified',
+          city: pred.city || matchedCsvRow.location || 'Not specified',
+          type: pred.type || matchedCsvRow.collegeType || 'N/A'
+        };
+      });
+
+      return predictionObj;
+    });
+
     const total = await Prediction.countDocuments({ user: req.user._id });
 
     res.json({
       success: true,
-      predictions,
+      predictions: refreshedPredictions,
       pagination: {
         current: parseInt(page),
         total: Math.ceil(total / parseInt(limit)),

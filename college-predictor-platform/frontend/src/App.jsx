@@ -1,4 +1,5 @@
 import React from 'react';
+import { useState } from 'react';
 import { useAppLogic } from './hooks/useAppLogic';
 import Layout from './components/layout/Layout';
 import AuthModal from './components/auth/AuthModal';
@@ -20,6 +21,8 @@ import ChatWidget from './components/chat/ChatWidget';
 import './index.css';
 
 function App() {
+  const [showIntelligenceHistory, setShowIntelligenceHistory] = useState(false);
+
   const {
     activeTab, setActiveTab,
     predictions,
@@ -38,7 +41,7 @@ function App() {
     adminUsers,
     deletePrediction, deleteAllPredictions, loadPredictionFromHistory,
     handleAuth, handleLogout, handlePredict, handleChatSend, handleIntelligenceChatSend, downloadPDF, downloadHistoryPDF, downloadAllPDF,
-    startNewIntelligenceChat, loadIntelligenceSession, deleteIntelligenceSession,
+    startNewIntelligenceChat, loadIntelligenceSession, deleteIntelligenceSession, deleteAllIntelligenceHistory,
     addNotification
   } = useAppLogic();
 
@@ -100,9 +103,9 @@ function App() {
             onNewChat={startNewIntelligenceChat}
             onLoadSession={loadIntelligenceSession}
             onDeleteSession={deleteIntelligenceSession}
-            onDeleteAll={() => addNotification('Clear all history coming soon', 'info')}
-            showHistory={false}
-            setShowHistory={() => {}}
+            onDeleteAll={deleteAllIntelligenceHistory}
+            showHistory={showIntelligenceHistory}
+            setShowHistory={setShowIntelligenceHistory}
             isIntelligence={true}
           />
         );

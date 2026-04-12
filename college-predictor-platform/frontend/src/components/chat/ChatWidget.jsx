@@ -79,7 +79,7 @@ const ChatWidget = ({
                     {sessions.length === 0 && (
                       <div className="text-center py-8 text-slate-400 text-xs">
                         <Sparkles size={32} className="mx-auto mb-2 opacity-20" />
-                        <p>No saved conversations yet</p>
+                        <p>No stored conversations in privacy mode</p>
                       </div>
                     )}
                     
@@ -216,7 +216,7 @@ const ChatWidget = ({
                   </button>
                   <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 text-[10px] font-900 uppercase tracking-widest flex items-center gap-2 shadow-sm">
                     <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                    Conversations Saved
+                    Privacy Mode
                   </div>
                 </>
               )}

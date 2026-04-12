@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 // Function to read and parse the real MHT-CET CSV data
 const parseCSVData = () => {
   try {
-    const csvPath = path.join(__dirname, '../../../FINAL_MAHARASHTRA_ALL_CASTWISE_FULL.csv');
+    const csvPath = path.join(__dirname, '../../../MHTCET_Cutoff_All_4_Rounds.csv');
 
     // Check if file exists
     if (!fs.existsSync(csvPath)) {
@@ -30,12 +30,84 @@ const parseCSVData = () => {
     }
 
     // Parse header
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/"/g, ''));
     console.log('📋 CSV Headers:', headers.slice(0, 10)); // Show first 10 headers
+    const indexByHeader = headers.reduce((acc, header, idx) => {
+      acc[header.toLowerCase()] = idx;
+      return acc;
+    }, {});
+    const isFourRoundFormat = Object.prototype.hasOwnProperty.call(indexByHeader, 'general_cutoff_r1');
 
     const colleges = new Map();
     let processedLines = 0;
     let skippedLines = 0;
+
+    const getValue = (values, key) => {
+      const idx = indexByHeader[key];
+      if (idx === undefined) return '';
+      return (values[idx] || '').replace(/"/g, '').trim();
+    };
+
+    const getNumber = (values, key) => {
+      const raw = getValue(values, key);
+      if (!raw) return null;
+      const parsed = parseFloat(raw);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    const buildRoundCutoff = (values, roundNum, isLadies, isTfws) => {
+      const general = getNumber(values, `general_percentage_r${roundNum}`);
+      const obc = getNumber(values, `obc_percentage_r${roundNum}`);
+      const sc = getNumber(values, `sc_percentage_r${roundNum}`);
+      const st = getNumber(values, `st_percentage_r${roundNum}`);
+      const ews = getNumber(values, `ews_percentage_r${roundNum}`);
+      const vjnt = getNumber(values, `vjnt_percentage_r${roundNum}`);
+      const sebc = getNumber(values, `sbc_percentage_r${roundNum}`);
+
+      return {
+        general,
+        obc,
+        sc,
+        st,
+        ews,
+        vjnt,
+        nt1: null,
+        nt2: null,
+        nt3: null,
+        sebc,
+        tfws: isTfws ? general : null,
+        ladies: {
+          general: isLadies ? general : null,
+          obc: isLadies ? obc : null,
+          sc: isLadies ? sc : null,
+          st: isLadies ? st : null,
+          vjnt: isLadies ? vjnt : null,
+          nt1: null,
+          nt2: null,
+          nt3: null,
+          sebc: isLadies ? sebc : null
+        }
+      };
+    };
+
+    const mergeCutoff = (targetCutoff, sourceCutoff) => {
+      ['general', 'obc', 'sc', 'st', 'ews', 'vjnt', 'nt1', 'nt2', 'nt3', 'sebc', 'tfws'].forEach((cat) => {
+        if (sourceCutoff[cat] !== null && sourceCutoff[cat] !== undefined) {
+          if (targetCutoff[cat] === null || targetCutoff[cat] === undefined || sourceCutoff[cat] > targetCutoff[cat]) {
+            targetCutoff[cat] = sourceCutoff[cat];
+          }
+        }
+      });
+
+      Object.keys(targetCutoff.ladies).forEach((cat) => {
+        const val = sourceCutoff.ladies[cat];
+        if (val !== null && val !== undefined) {
+          if (targetCutoff.ladies[cat] === null || targetCutoff.ladies[cat] === undefined || val > targetCutoff.ladies[cat]) {
+            targetCutoff.ladies[cat] = val;
+          }
+        }
+      });
+    };
 
     // Process each line of CSV data (process all lines for complete data)
     for (let i = 1; i < lines.length; i++) {
@@ -48,49 +120,25 @@ const parseCSVData = () => {
       // Handle CSV parsing with quoted fields
       const values = parseCSVLine(line);
 
-      if (values.length < 15) {
+      if (values.length < 10) {
         skippedLines++;
         continue;
       }
 
       try {
-        const collegeId = values[0]?.trim();
-        const collegeName = values[1]?.replace(/"/g, '').trim();
-        const collegeCode = values[2]?.trim();
-        const branchName = values[3]?.replace(/"/g, '').trim();
-        const branchCode = values[4]?.trim();
-        const round = values[5]?.trim();
-        const year = values[6]?.trim();
-        const seatType = values[7]?.trim();
-        const seatLevel = values[8]?.trim();
-        const location = values[9]?.trim();
-        const collegeType = values[10]?.trim();
+        if (!isFourRoundFormat) {
+          skippedLines++;
+          continue;
+        }
 
-        // Parse caste-wise cutoffs - new comprehensive format
-        const gopens = values[11] && values[11].trim() !== '' ? parseFloat(values[11]) : null;
-        const gscs = values[12] && values[12].trim() !== '' ? parseFloat(values[12]) : null;
-        const gsts = values[13] && values[13].trim() !== '' ? parseFloat(values[13]) : null;
-        const gvjs = values[14] && values[14].trim() !== '' ? parseFloat(values[14]) : null;
-        const gnt1s = values[15] && values[15].trim() !== '' ? parseFloat(values[15]) : null;
-        const gnt2s = values[16] && values[16].trim() !== '' ? parseFloat(values[16]) : null;
-        const gnt3s = values[17] && values[17].trim() !== '' ? parseFloat(values[17]) : null;
-        const gobcs = values[18] && values[18].trim() !== '' ? parseFloat(values[18]) : null;
-        const gsebcs = values[19] && values[19].trim() !== '' ? parseFloat(values[19]) : null;
-
-        // Ladies categories
-        const lopens = values[20] && values[20].trim() !== '' ? parseFloat(values[20]) : null;
-        const lscs = values[21] && values[21].trim() !== '' ? parseFloat(values[21]) : null;
-        const lsts = values[22] && values[22].trim() !== '' ? parseFloat(values[22]) : null;
-        const lvjs = values[23] && values[23].trim() !== '' ? parseFloat(values[23]) : null;
-        const lnt1s = values[24] && values[24].trim() !== '' ? parseFloat(values[24]) : null;
-        const lnt2s = values[25] && values[25].trim() !== '' ? parseFloat(values[25]) : null;
-        const lnt3s = values[26] && values[26].trim() !== '' ? parseFloat(values[26]) : null;
-        const lobcs = values[27] && values[27].trim() !== '' ? parseFloat(values[27]) : null;
-        const lsebcs = values[28] && values[28].trim() !== '' ? parseFloat(values[28]) : null;
-
-        // Special categories
-        const tfws = values[29] && values[29].trim() !== '' ? parseFloat(values[29]) : null;
-        const ews = values[30] && values[30].trim() !== '' ? parseFloat(values[30]) : null;
+        const collegeName = getValue(values, 'college_name');
+        const collegeCode = getValue(values, 'college_code');
+        const branchName = getValue(values, 'branch_name');
+        const branchCode = getValue(values, 'branch_code');
+        const location = getValue(values, 'location');
+        const collegeType = getValue(values, 'college_type');
+        const isLadies = getValue(values, 'is_ladies').toLowerCase() === 'yes';
+        const isTfws = getValue(values, 'is_tfws').toLowerCase() === 'yes';
 
         // Skip if essential data is missing
         if (!collegeName || !branchName || !location) {
@@ -113,27 +161,27 @@ const parseCSVData = () => {
             establishedYear: getEstablishedYear(collegeName),
             courses: [],
             cutoff: {
-              general: gopens,
-              obc: gobcs,
-              sc: gscs,
-              st: gsts,
-              ews: ews,
-              vjnt: gvjs,
-              nt1: gnt1s,
-              nt2: gnt2s,
-              nt3: gnt3s,
-              sebc: gsebcs,
-              tfws: tfws,
+              general: null,
+              obc: null,
+              sc: null,
+              st: null,
+              ews: null,
+              vjnt: null,
+              nt1: null,
+              nt2: null,
+              nt3: null,
+              sebc: null,
+              tfws: null,
               ladies: {
-                general: lopens,
-                obc: lobcs,
-                sc: lscs,
-                st: lsts,
-                vjnt: lvjs,
-                nt1: lnt1s,
-                nt2: lnt2s,
-                nt3: lnt3s,
-                sebc: lsebcs
+                general: null,
+                obc: null,
+                sc: null,
+                st: null,
+                vjnt: null,
+                nt1: null,
+                nt2: null,
+                nt3: null,
+                sebc: null
               }
             },
             fees: generateFees(type),
@@ -159,102 +207,73 @@ const parseCSVData = () => {
             seats: generateSeats(branchName),
             rounds: [],
             cutoff: {
-              general: gopens,
-              obc: gobcs,
-              sc: gscs,
-              st: gsts,
-              ews: ews,
-              vjnt: gvjs,
-              nt1: gnt1s,
-              nt2: gnt2s,
-              nt3: gnt3s,
-              sebc: gsebcs,
-              tfws: tfws,
+              general: null,
+              obc: null,
+              sc: null,
+              st: null,
+              ews: null,
+              vjnt: null,
+              nt1: null,
+              nt2: null,
+              nt3: null,
+              sebc: null,
+              tfws: null,
               ladies: {
-                general: lopens,
-                obc: lobcs,
-                sc: lscs,
-                st: lsts,
-                vjnt: lvjs,
-                nt1: lnt1s,
-                nt2: lnt2s,
-                nt3: lnt3s,
-                sebc: lsebcs
+                general: null,
+                obc: null,
+                sc: null,
+                st: null,
+                vjnt: null,
+                nt1: null,
+                nt2: null,
+                nt3: null,
+                sebc: null
               }
             }
           });
         }
 
-        // Add round data to course
+        // Add or merge 4-round data to course and college
         const targetCourse = college.courses.find(c => c.name === branchName);
-        if (targetCourse && round) {
-          const roundNum = parseInt(round.replace(/[^0-9]/g, '')) || 1;
-          const roundCutoff = {
-            general: gopens,
-            obc: gobcs,
-            sc: gscs,
-            st: gsts,
-            ews: ews,
-            vjnt: gvjs,
-            nt1: gnt1s,
-            nt2: gnt2s,
-            nt3: gnt3s,
-            sebc: gsebcs,
-            tfws: tfws,
-            ladies: {
-              general: lopens,
-              obc: lobcs,
-              sc: lscs,
-              st: lsts,
-              vjnt: lvjs,
-              nt1: lnt1s,
-              nt2: lnt2s,
-              nt3: lnt3s,
-              sebc: lsebcs
+        if (targetCourse) {
+          for (let roundNum = 1; roundNum <= 4; roundNum++) {
+            const roundCutoff = buildRoundCutoff(values, roundNum, isLadies, isTfws);
+
+            const hasAtLeastOneCutoff = ['general', 'obc', 'sc', 'st', 'ews', 'vjnt', 'sebc', 'tfws']
+              .some((cat) => roundCutoff[cat] !== null && roundCutoff[cat] !== undefined);
+
+            if (!hasAtLeastOneCutoff) continue;
+
+            const existingRound = targetCourse.rounds.find(r => r.number === roundNum);
+            if (!existingRound) {
+              targetCourse.rounds.push({ number: roundNum, cutoff: roundCutoff });
+            } else {
+              mergeCutoff(existingRound.cutoff, roundCutoff);
             }
-          };
 
-          // Update course round data
-          const existingRound = targetCourse.rounds.find(r => r.number === roundNum);
-          if (!existingRound) {
-            targetCourse.rounds.push({ number: roundNum, cutoff: roundCutoff });
-          }
+            let collegeRound = college.rounds.find(r => r.number === roundNum);
+            if (!collegeRound) {
+              collegeRound = { number: roundNum, cutoff: { ...roundCutoff } };
+              college.rounds.push(collegeRound);
+            } else {
+              mergeCutoff(collegeRound.cutoff, roundCutoff);
+            }
 
-          // Also update college round data
-          let collegeRound = college.rounds.find(r => r.number === roundNum);
-          if (!collegeRound) {
-            collegeRound = { number: roundNum, cutoff: { ...roundCutoff } };
-            college.rounds.push(collegeRound);
-          } else {
-            // Update college round cutoff if this branch has a higher cutoff for the same round
-            Object.keys(roundCutoff).forEach(cat => {
-              if (cat === 'ladies') {
-                Object.keys(roundCutoff.ladies).forEach(lcat => {
-                  if (roundCutoff.ladies[lcat] && (!collegeRound.cutoff.ladies[lcat] || roundCutoff.ladies[lcat] > collegeRound.cutoff.ladies[lcat])) {
-                    collegeRound.cutoff.ladies[lcat] = roundCutoff.ladies[lcat];
-                  }
-                });
-              } else if (roundCutoff[cat] && (!collegeRound.cutoff[cat] || roundCutoff[cat] > collegeRound.cutoff[cat])) {
-                collegeRound.cutoff[cat] = roundCutoff[cat];
-              }
+            updateCollegeCutoffs(college, {
+              general: roundCutoff.general,
+              obc: roundCutoff.obc,
+              sc: roundCutoff.sc,
+              st: roundCutoff.st,
+              ews: roundCutoff.ews,
+              vjnt: roundCutoff.vjnt,
+              nt1: roundCutoff.nt1,
+              nt2: roundCutoff.nt2,
+              nt3: roundCutoff.nt3,
+              sebc: roundCutoff.sebc,
+              tfws: roundCutoff.tfws
             });
           }
         }
-
-        // Update college overall cutoff to be the best among all branches
-        updateCollegeCutoffs(college, {
-          general: gopens,
-          obc: gobcs,
-          sc: gscs,
-          st: gsts,
-          ews: ews,
-          vjnt: gvjs,
-          nt1: gnt1s,
-          nt2: gnt2s,
-          nt3: gnt3s,
-          sebc: gsebcs,
-          tfws: tfws
-        });
 
         processedLines++;
       } catch (error) {
